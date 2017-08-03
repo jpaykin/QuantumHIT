@@ -1,0 +1,6 @@
+agda_stuff
+*~
+*.vo
+*.glob
+*.aux
+*.agdai
