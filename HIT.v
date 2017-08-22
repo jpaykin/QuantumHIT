@@ -48,15 +48,18 @@ Axiom QType_rect_H : apD QType_rect H = P_H.
 (* bleh, this is super dense *)
 Definition R :=  fun p => moveR_transport_V P H P_Qubit P_Qubit p^
                           = transport2 P H_dag P_Qubit @ p.
+
 Definition P_H_dag' : apD QType_rect H^ 
                     = transport2 P H_dag (QType_rect Qubit) @ apD QType_rect H :=
-  apD_V _ _ @ transport R QType_rect_H^ P_H_dag.
+  apD_V QType_rect H @ transport R QType_rect_H^ P_H_dag. 
 Axiom QType_rect_H_dag : apD02 QType_rect H_dag = P_H_dag'.
 
 
-
 End QType.
-Check QType_rect.
+Check QType_rect_H.
+(*Notation "Q1 ⊗ Q2" := (Tensor Q1 Q2) (at level 20).*)
+Notation "Q1 ⊸ Q2" := (Lolli Q1 Q2) (at level 20).
+
 
 (* Recursion *)
 Section QType_rec.
@@ -77,31 +80,34 @@ Variable C_Lolli : C -> C -> C.
 Variable C_H : C_Qubit = C_Qubit.
 Variable C_H_dag : C_H^ = C_H.
 
-Definition QType_rec (Q : QType) : C.
+
+Definition P := fun (_ : QType) => C.
+Definition P_Qubit := C_Qubit.
+Definition P_Lolli := fun (_ : QType) x (_ : QType) y => C_Lolli x y.
+Definition P_H : transport (λ _· C) H C_Qubit = C_Qubit :=
+    transport_const _ _ @ C_H.
+Definition P_H_dag : P_H' (λ _· C) C_Qubit P_H 
+                  = transport2 (λ _· C) H_dag C_Qubit @ P_H.
+Proof.
+    unfold P_H', P_H.
+    refine (moveR_transport_V_const _ _ _ _ _ _ _ _ @ _).
+    refine (_ @ (concat_p_pp _ _ _)^).
+    rewrite (transport2_const H_dag C_Qubit)^. 
+    refine ((concat_p_pp _ _ _)^ @ _).
+    refine (idpath @@ _).
+    refine (inv_pp _ _ @@ idpath @ _).
+    refine ((concat_p_pp _ _ _)^ @ _).
+    refine (idpath @@ concat_Vp _ @ _).
+    refine (concat_p1 _ @ _).
+    exact C_H_dag.
+Defined.
+
+
+
+Definition QType_rec : QType -> C.
 (*  QType_rect _ C_Qubit (λ _ C1 _ C2 · C_Lolli C1 C2) C_H _ Q.*)
 Proof. 
-  set (P_Lolli := λ (_ : QType) C1 (_ : QType) C2 · C_Lolli C1 C2).
-  set (P_H := (transport_const _ _ @ C_H) : transport (λ _· C) H C_Qubit = C_Qubit).  assert (P_H_dag : P_H' (λ _· C) C_Qubit P_H 
-                  = transport2 (λ _· C) H_dag C_Qubit @ P_H).
-  { unfold P_H'. 
-    About transport2_const.
-    transitivity ( transport2 (λ _· C) H_dag C_Qubit 
-                 @ (transport_const H C_Qubit @ (transport_const H C_Qubit)^)
-                 @ P_H); [ | rewrite concat_pV, concat_p1; reflexivity].
-    repeat rewrite concat_p_pp.
-    rewrite <- transport2_const.
-    rewrite moveR_transport_V_const.
-    repeat rewrite <- concat_p_pp.
-    f_ap.
-    unfold P_H.
-    rewrite inv_pp.
-    repeat rewrite <- concat_p_pp.
-    rewrite concat_Vp, concat_p1.
-    repeat rewrite concat_p_pp.
-    rewrite concat_Vp, concat_1p.
-    exact C_H_dag.
-  }
-  exact (QType_rect _ C_Qubit P_Lolli P_H P_H_dag Q).
+  exact (QType_rect P C_Qubit P_Lolli P_H P_H_dag).
 Defined.
 
 (* TODO: computation rules for QType_rec *)
@@ -109,18 +115,58 @@ Lemma QType_rec_Qubit : QType_rec Qubit = C_Qubit.
 Proof.
   reflexivity.
 Defined.
+
+Lemma apD_const' : forall {A B} {x y : A} (f : A -> B) (p : x = y),
+      ap f p = (transport_const p (f x))^ @ apD f p.
+Proof.
+  intros. 
+  refine (_ @ (1 @@ (apD_const _ _)^ )). 
+  refine (_ @ (concat_p_pp _ _ _)^).
+  refine (_ @ ((concat_Vp _)^ @@ 1)).
+  refine (concat_1p _)^.
+Defined.
+
 Lemma QType_rec_H : ap QType_rec H = C_H.
-Admitted.
+Proof. 
+  unfold QType_rec.
+  refine (apD_const' _ _ @ _); simpl.
+  refine (1 @@ QType_rect_H _ _ _ _ _ @ _). 
+  refine (concat_p_pp _ _ _ @ _).
+  refine (concat_Vp _ @@ 1 @ _).
+  refine (concat_1p _).
+Defined.
 
 (* Used in the type of QType_rec_H_dag *)
 Lemma QType_rec_H' : ap QType_rec H^ = C_H^.
+Proof. About inverse_ap.
+  exact ((inverse_ap QType_rec H)^ @ ap inverse QType_rec_H).
+Defined. 
+
+About QType_rect_H_dag. Print P_H_dag'.
+
+
+Print P_H_dag'.
+Definition C_H_dag' : apD QType_rec H^ 
+                    = transport2 P H_dag P_Qubit @ apD QType_rec H.
 Proof.
-  exact ((inverse_ap _ _)^ @ ap _ QType_rec_H).
+  refine (apD_V _ _ @ _). 
+  refine (transport (R P P_Qubit) _ P_H_dag).
+  refine (QType_rect_H P P_Qubit P_Lolli P_H P_H_dag)^.
+(*refine (apD_const _ _ @ _). 
+  refine (1 @@ (QType_rec_H' @ C_H_dag) @ _).
+  refine (_ @ (1 @@ (apD_const _ _)^)).
+  refine (_ @ (1 @@ (1 @@ QType_rec_H^))).
+  refine (_ @ (concat_p_pp _ _ _)^).
+  refine (_ @@ 1).
+  refine (transport2_const _ _). *)
 Defined.
 
-Lemma QType_rec_H_dag : ap02 QType_rec H_dag 
-                      = QType_rec_H' @ C_H_dag @ QType_rec_H^.
-Admitted.
+
+Lemma QType_rec_H_dag : apD02 QType_rec H_dag = C_H_dag'.
+Proof.
+  exact (QType_rect_H_dag P P_Qubit P_Lolli P_H P_H_dag).
+Defined.
+
 End QType_rec.
 Arguments QType_rec C C_Qubit C_Lolli C_H C_H_dag Q : assert.
 
@@ -139,26 +185,12 @@ Definition QType_size : QType -> nat := QType_rec_triv nat 1 (λ n1 n2· n1+n2)%
 Require Import Peano.
 Open Scope nat.
 
-Lemma lt_trans : forall (m n p : nat), m < n -> n < p -> (m < p)%nat.
-Admitted.
-(*
+
+Lemma lt_plus_r : forall m n, 0 < m -> 0 < m + n.
 Proof.
-  unfold lt.
-  intros m n p H1 H2.
-  apply (leq_transd H1).
-  assert (le_1 : forall (x:nat), x <= x.+1).
-  { induction x. constructor.
-    Print Peano.le.
-    apply le_S.
-  }
-  eapply (leq_transd _ H2).
-  -
-Admitted.
-*)
-Lemma lt_plus : forall m n p q, m < p -> n < q -> m + n < p + q.
-Admitted.
-Lemma lt_plus_r : forall m n, 0 < m -> n < m + n.
-Admitted.
+  destruct m; intros; auto.
+  contradiction.
+Defined.
 
 
 Print le. Print leq. Print DHProp. About hProp. Locate "_ -Type".
@@ -173,30 +205,63 @@ Proof.
 Defined.
 (* It says that forall (pf1 pf2 : m < n), ∃! (pf2 : pf1 = pf2) *)
 
+(* subsumed by library path_ishprop *)
 Lemma lt_eq : forall {m n} (pf1 pf2 : m < n), pf1 = pf2.
 Proof.
-  intros.
+  intros. apply path_ishprop.
+(*  intros.
   destruct (m < n); simpl in *.
   destruct dhprop_hprop; simpl in *.
   destruct istrunc_trunctype_type with (x := pf1) (y := pf2).
-  exact center.
+  exact center.*)
 Defined.
 
 
 (* Depends on lt_contr *)
 Lemma QType_size_pos : forall Q, 0 < QType_size Q.
 Proof. 
-  assert (P_Qubit : 0 < 1) by constructor.
-  apply QType_rect with (P_Qubit := P_Qubit).
-  - intros Q1 H1 Q2 H2. simpl.
-    apply lt_trans with (QType_size Q2); auto.
-    apply lt_plus_r; auto.
-  - apply lt_eq.
+  set (P Q := 0 < QType_size Q).
+  assert (P_Qubit : 0 < 1) by constructor. 
+  assert (P_Lolli : forall Q1 (H1 : P Q1) Q2 (H2 : P Q2), P (Lolli Q1 Q2)).
+  { 
+    unfold P; intros; simpl.
+    apply lt_plus_r. auto.
+  } 
+  assert (P_H : transport P H P_Qubit = P_Qubit) by apply path_ishprop.
+  assert (P_H_dag : P_H' P P_Qubit P_H = transport2 P H_dag P_Qubit @ P_H) 
+    by apply path_ishprop.
+  apply (QType_rect P P_Qubit P_Lolli P_H P_H_dag).
 Qed.
 
+(************)
+(* Contexts *)
+(************)
 
-  
+Class LinContextRelations T (context : Type -> Type) := 
+    { singletonCtx : forall X, X -> T -> context X -> Type
+    ; merged : forall X, context X -> context X -> context X -> Type
+    ; addCtx : forall X, context X -> X -> T -> context X -> Type }.
 
+Definition CtxList (X : Set) := list (X * QType).
+
+
+(************)
+(** Syntax **)
+(************)
+
+
+Inductive LExp : forall {X : Set}, Ctx X -> QType -> Type :=
+| LVar : forall {X} (Γ : Ctx X) (x : X) (Q : QType), 
+         Γ x = Some Q -> LExp Γ (Var x) Q
+| LApp : forall {X} (Γ1 Γ2 Γ : Ctx X) (Q1 Q2 : QType) e1 e2,
+         Merge Γ1 Γ2 Γ ->
+         LExp Γ1 e1 (Q1 ⊸ Q2) ->
+         LExp Γ2 e2 Q1 ->
+         LExp Γ (App e1 e2) Q2
+| LAbs : forall {X} (Γ : Ctx X) Q1 Q2 e',
+         LExp (extend Γ Q1) e' Q2 ->
+         LExp Γ (Abs e') (Q1 ⊸ Q2)
+.
 
 Inductive Exp (Γ : Set) : Set :=
 | Var : Γ -> Exp Γ
