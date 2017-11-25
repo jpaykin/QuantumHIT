@@ -1,0 +1,511 @@
+\usepackage{amsmath, amsthm, amsfonts, amssymb}
+
+%\usepackage{hyperref}
+\usepackage[capitalize,noabbrev]{cleveref} % must be loaded after hyperref
+%\usepackage{cleveref}
+\usepackage{natbib}
+
+\usepackage[utf8]{inputenc}
+%\usepackage[T1]{fontenc}
+%\newcommand{\upsidedownbang}{!`}
+\newcommand{\upsidedownbang}{\rotatebox[origin=c]{180}{!}}
+\usepackage{anyfontsize}
+\usepackage{xspace}
+\usepackage{url}
+
+% balance the last page
+\usepackage{flushend}
+
+% Lists
+%\usepackage[inline,shortlabels]{enumitem}
+
+% Figures
+\usepackage{wrapfig}
+
+% Proof trees
+\usepackage{mathpartir}
+
+% Symbolx
+\usepackage{cmll} % Linear logic symbols
+
+% Quantum
+\usepackage{braket}
+\newcommand{\Hilb}{\mathbb{H}}
+\newcommand{\qubit}{\texttt{qubit}}
+\newcommand{\new}[1]{\mathsf{new}~#1}
+\newcommand{\meas}[1]{\mathsf{meas}~#1}
+
+
+% LNL
+\newcommand{\LOWER}{\mathsf{Lower}}
+\newcommand{\LIFT}{\mathsf{Lift}}
+\newcommand{\Lower}[1]{\LOWER~#1}
+\newcommand{\Lift}[1]{\LIFT~#1}
+\renewcommand{\put}[1]{\mathsf{put}~#1}
+\newcommand{\suspend}[1]{\mathsf{suspend}~#1}
+\newcommand{\force}[1]{\mathsf{force}~#1}
+
+% General PL
+\newcommand{\bool}{\texttt{bool}}
+\newcommand{\LET}{\textsf{let}}
+\newcommand{\IN}{\textsf{in}}
+\newcommand{\letin}[3]{\LET \; #1 = #2 \; \IN \; #3}
+\newcommand{\letbang}[3]{\LET \; !#1 = #2 \; \IN \; #3}
+\newcommand{\TT}{\textsf{true}}
+\newcommand{\FF}{\textsf{false}}
+\newcommand{\IF}{\textsf{if}}
+\newcommand{\THEN}{\textsf{then}}
+\newcommand{\ELSE}{\textsf{else}}
+\newcommand{\ifthen}[3]{\IF \; #1 \; \THEN \; #2 \; \ELSE \; #3}
+
+\newcommand\doubleplus{+\kern-1.3ex+\kern0.8ex}
+
+% Appendix
+\usepackage{appendix}
+
+%   Tikz
+\usepackage{tikz} %commutativity diagrams
+\usetikzlibrary{%
+  arrows,%
+  shapes.misc,% wg. rounded rectangle
+  shapes.arrows,%
+  shapes.callouts,
+  chains,%
+  matrix,%
+  positioning,% wg. " of "
+  scopes,%
+  decorations.pathmorphing,% /pgf/decoration/random steps | erste Graphik
+  decorations.text,
+  shadows%
+}
+
+%\newcommand{\code}[1]{\lstinline{#1}}
+\newcommand{\code}[1]{{\small\texttt{#1}}}
+
+
+\newcommand{\function}[2]{#1~#2}
+
+% Latin  Abbr
+\newcommand{\etal}{\emph{et al.}\xspace}
+\newcommand{\eg}{\emph{e.g.,}\xspace}
+\newcommand{\ie}{\emph{i.e.,}\xspace}
+\newcommand{\etc}{\emph{etc.}\xspace}
+
+% Categories
+\newcommand{\Hask}{\textsc{hask}}
+\newcommand{\Lin}{\textsc{linear}}
+
+
+% Table formatting
+\newcommand{\ltwo}[1]{\multicolumn{2}{l}{#1}}
+\newcommand{\ctwo}[1]{\multicolumn{2}{c}{#1}}
+\usepackage{booktabs}
+
+% Code
+\newcommand{\Just}[1]{\texttt{Just}~#1}
+\newcommand{\Nothing}{\texttt{Nothing}}
+
+
+% New theorems
+\newtheorem{definition}{Definition}
+\newtheorem{proposition}{Proposition}
+\newtheorem{lemma}{Lemma}
+\newtheorem{note}{Note}
+
+
+
+
+%% listings for Haskell
+\usepackage{listings}
+\usepackage{MnSymbol}
+\lstloadlanguages{Haskell}
+\newcommand{\hcode}[1]{\lstinline[basicstyle=\normalsize\ttfamily,keepspaces=true,literate={+}{{$+$}}1 {/}{{$/$}}1 {*}{{$*$}}1
+               {=}{{$=$}}1 %{/=}{{$\neg$}}1
+               {>}{{$>$}}1 {<}{{$<$}}1 
+               {++}{{$+\!\!\!+$}}1 {::}{{$:\!\!\!\!:$}}1 {∷}{{$:\!\!\!\!:$}}1
+               {\\\\}{{\char`\\\char`\\}}1
+               {->}{{$\rightarrow$}}1 {>=}{{$\geq$}}2 
+               {<-}{{$\leftarrow$}}1 {←}{{$\leftarrow$}}1
+               {→}{{$\rightarrow$}}1
+               {<=}{{$\leq$}}2 {=>}{{$\Rightarrow$}}2 {⇒}{{$\Rightarrow$}}1
+               {-<}{{$\leftY$}}1 
+               {\ .\ }{{$\circ$}}2 {(.)}{{($\circ$)}}2
+               {=>>=}{{$\lbind$}}2
+               {<<}{{$\ll$}}2 {>>}{{$\gg$}}2 {>>=}{{$>\!\!>\!\!=$}}2
+               {<<<}{{$\lll$}}2 {>>>}{{$\ggg$}}2 {^<<}{{$\hat{}\!\!\ll$}}2 {^>>}{{$\hat{}\!\!\gg$}}2
+               {|}{{$\mid$}}1
+               {〉}{{$\rangle$}}1 {〈}{{$\langle$}}1
+               {undefined}{{$\bot$}}1
+               {not\ }{{$\neg$}}1
+               {fun\ }{{\textbackslash}}1
+               {^}{{\ensuremath{^\wedge}}}1
+               {`elem`}{{$\in$}}1
+               {⊢}{{$\vdash$}}2
+               {forall}{{$\forall$}}1
+               {∀}{{$\forall$}}1
+               {>!}{{$>!$}}1
+               {$$}{{$ \$ $}}1
+               {⋯}{{$\cdots$}}2
+               {⊸}{{$\multimap$}}1
+               {↝}{{$\leadsto$}}1
+               {⊗}{{$\otimes$}}1
+               {⊕}{{$\oplus$}}1
+               {⋓}{{$\Cup$}}1
+                {α}{{$\alpha$}}1
+                {β}{{$\beta$}}1
+                {γ}{{$\gamma$}}1
+                {δ}{{$\delta$}}1
+                {ε}{{$\epsilon$}}1
+                {λ}{{$\lambda$}}1
+                {σ}{{$\sigma$}}1
+                {ρ}{{$\rho$}}1
+                {Γ}{{$\Gamma$}}1
+                {⟦}{{$\llbracket$}}1
+                {⟧}{{$\rrbracket$}}1
+                {τ}{{$\tau$}}1
+                {₁}{{$_1$}}1
+                {₂}{{$_2$}}1
+]{#1}}
+\lstnewenvironment{haskell}
+    {\lstset{}%
+      \csname lst@SetFirstLabel\endcsname}
+    {\csname lst@SaveFirstLabel\endcsname}
+    \lstset{
+      basicstyle=\small\ttfamily,
+      escapeinside={/+}{+/},
+%      flexiblecolumns=false,
+      belowskip={0.8\medskipamount},
+      basewidth={0.5em,0.45em},
+      keepspaces=true,
+      literate={+}{{$+$}}1 {/}{{$/$}}1 {*}{{$*$}}1
+               {=}{{$=$}}1 %{≠}{{$\neq$}}1
+               {>}{{$>$}}1 {<}{{$<$}}1 
+%               {\\}{{$\lambda$}}1
+               {++}{{$+\!\!\!+$}}1 {::}{{$:\!\!\!\!:$}}2 {∷}{{$:\!\!\!\!:$}}1
+               {\\\\}{{\char`\\\char`\\}}1
+               {->}{{$\rightarrow$}}2 {>=}{{$\geq$}}2 
+               {<-}{{$\leftarrow$}}2 {←}{{$\leftarrow$}}1
+               {→}{{$\rightarrow$}}1
+               {<=}{{$\leq$}}2 {=>}{{$\Rightarrow$}}2 {⇒}{{$\Rightarrow$}}1
+               {-<}{{$\leftY$}}1 
+%               {\ .\ }{{$\circ$}}2 {(.)}{{($\circ$)}}2
+               {=>>=}{{$\lbind$}}2
+               {<<}{{$\ll$}}2 {>>}{{$\gg$}}2 {>>=}{{$>\!\!>\!\!=$}}2
+               {<<<}{{$\lll$}}2 {>>>}{{$\ggg$}}2 {^<<}{{$\hat{}\!\!\ll$}}2 {^>>}{{$\hat{}\!\!\gg$}}2
+               {|}{{$\mid$}}1
+               {〉}{{$\rangle$}}1 {〈}{{$\langle$}}1
+               {undefined}{{$\bot$}}1
+               {not\ }{{$\neg$}}1
+               {fun\ }{{\textbackslash}}1
+               {^}{{$^\wedge$}}1
+               {*^}{{$^\wedge$}}2
+               {`elem`}{{$\in$}}1
+               {⊢}{{$\vdash$}}2
+               {forall}{{$\forall$}}1
+               {∀}{{$\forall$}}1
+               {!}{{$ \$ $}}1
+               {*!}{{$ \$ $}}2
+               {>!}{{$>!$}}2
+               {⋯}{{$\cdots$}}2
+               {⊸}{{$\multimap$}}1
+               {↝}{{$\leadsto$}}1
+               {⊗}{{$\otimes$}}1
+               {*⊗}{{$\otimes$}}2
+               {*=}{{$=$}}2
+               {⊕}{{$\oplus$}}1
+               {⋓}{{$\Cup$}}1
+               {⊗⊗}{{$\prod$}}2
+                {α}{{$\alpha$}}1
+                {β}{{$\beta$}}1
+                {η}{{$\eta$}}1
+                {γ}{{$\gamma$}}1
+                {δ}{{$\delta$}}1
+                {ε}{{$\epsilon$}}1
+                {λ}{{$\lambda$}}1
+                {σ}{{$\sigma$}}1
+                {τ}{{$\tau$}}1
+                {ρ}{{$\rho$}}1
+                {Γ}{{$\Gamma$}}1
+                {⟦}{{$\llbracket$}}1
+                {⟧}{{$\rrbracket$}}1
+                {₁}{{$_1$}}1
+                {₂}{{$_2$}}1
+              }
+
+\definecolor{identifierColor}{rgb}{0.65,0.16,0.16}
+\newcommand{\symb}[1]{\textcolor{black}{\ensuremath{#1}}}
+
+\lstnewenvironment{haskellcolor}
+    {\lstset{}%
+      \csname lst@SetFirstLabel\endcsname}
+    {\csname lst@SaveFirstLabel\endcsname}
+    \lstset{
+      language=Haskell,
+      basicstyle=\ttfamily,
+      commentstyle=\sf,
+      identifierstyle=\color{identifierColor},
+      keywordstyle=\color{blue},
+      stringstyle=\color{green}\ttfamily,
+      deletekeywords={exp,drop,Handle,openFile,writeFile,fail},
+%     flexiblecolumns=false,
+      escapeinside={/+}{+/},
+      belowskip={0.8\medskipamount},
+      basewidth={0.5em,0.45em},
+      keepspaces=true,
+      upquote=true,
+      escapechar=\#,
+      literate= {+}{{\symb{+}}}1 
+                {/}{{\symb{/}}}1 
+                {*}{{\symb{*}}}1
+                {=}{{\symb{=}}}1 %{≠}{{$\neq$}}1
+                {>}{{\symb{>}}}1 
+                {<}{{\symb{<}}}1 
+%               {\\}{{$\lambda$}}1
+                {++}{{\symb{+\!\!\!+}}}1 
+                {::}{{\symb{:\!\!\!\!:}}}2 
+                {∷}{{\symb{:\!\!\!\!:}}}1
+                {\\\\}{{\char`\\\char`\\}}1
+                {->}{{\symb{\rightarrow}}}2 
+                {>=}{{\symb{\geq}}}2 
+                {<-}{{\symb{\leftarrow}}}2 
+                {←}{{\symb{\leftarrow}}}1
+                {→}{{\symb{\rightarrow}}}1
+                {<=}{{\symb{\leq}}}2 
+                {=>}{{\symb{\Rightarrow}}}2 
+                {⇒}{{\symb{\Rightarrow}}}1
+                {-<}{{\symb{\leftY}}}1 
+%               {\ .\ }{{$\circ$}}2 {(.)}{{($\circ$)}}2
+                {=>>=}{{\symb{\lbind}}}2
+                {<<}{{\symb{\ll}}}2 {>>}{{\symb{\gg}}}2 {>>=}{{\symb{>\!\!>\!\!=}}}2
+               {<<<}{{\symb{\lll}}}2 {>>>}{{\symb{\ggg}}}2 {^<<}{{\symb{\hat{}\!\!\ll}}}2 {^>>}{{\symb{\hat{}\!\!\gg}}}2
+               {|}{{\symb{\mid}}}1
+               {〉}{{\symb{\rangle}}}1 {〈}{{\symb{\langle}}}1
+               {undefined}{{\symb{\bot}}}1
+               {not\ }{{\symb{\neg}}}1
+               {fun\ }{{\textbackslash}}1
+               {^}{{\symb{^\wedge}}}1
+               {*^}{{\symb{^\wedge}}}2
+               {`elem`}{{\symb{\in}}}1
+               {⊢}{{\symb{\vdash}}}2
+               {forall}{{\symb{\forall}}}1
+               {∀}{{\symb{\forall}}}1
+               {¡}{{\symb{ \$ }}}1
+               {*!}{{\symb{ \$ }}}2
+               {>!}{{\symb{>!}}}2
+               {⋯}{{$\cdots$}}2
+               {⊸}{{\symb{\multimap}}}1
+               {↝}{{\symb{\leadsto}}}1
+               {⊗}{{\symb{\otimes}}}1
+               {*⊗}{{\symb{\otimes}}}2
+               {*=}{{\symb{=}}}2
+               {⊕}{{\symb{\oplus}}}1
+               {⋓}{{\symb{\Cup}}}1
+               {⊗⊗}{{\symb{\prod}}}2
+               {∅}{{$\emptyset$}}1
+                {α}{{$\alpha$}}1
+                {β}{{$\beta$}}1
+                {η}{{$\eta$}}1
+                {γ}{{$\gamma$}}1
+                {δ}{{$\delta$}}1
+                {ε}{{$\epsilon$}}1
+                {λ}{{$\lambda$}}1
+                {σ}{{$\sigma$}}1
+                {τ}{{$\tau$}}1
+                {ρ}{{$\rho$}}1
+                {Γ}{{$\Gamma$}}1
+                {⟦}{{$\llbracket$}}1
+                {⟧}{{$\rrbracket$}}1
+                {₁}{{$_1$}}1
+                {₂}{{$_2$}}1
+              }
+
+%% Unicode
+\usepackage{newunicodechar}
+\let\Alpha=A
+\let\Beta=B
+\let\Epsilon=E
+\let\Zeta=Z
+\let\Eta=H
+\let\Iota=I
+\let\Kappa=K
+\let\Mu=M
+\let\Nu=N
+\let\Omicron=O
+\let\omicron=o
+\let\Rho=P
+\let\Tau=T
+\let\Chi=X
+
+\newunicodechar{Α}{\ensuremath{\Alpha}}
+\newunicodechar{α}{\ensuremath{\alpha}}
+\newunicodechar{Β}{\ensuremath{\Beta}}
+\newunicodechar{β}{\ensuremath{\beta}}
+\newunicodechar{Γ}{\ensuremath{\Gamma}}
+\newunicodechar{γ}{\ensuremath{\gamma}}
+\newunicodechar{Δ}{\ensuremath{\Delta}}
+\newunicodechar{δ}{\ensuremath{\delta}}
+\newunicodechar{Ε}{\ensuremath{\Epsilon}}
+\newunicodechar{ε}{\ensuremath{\epsilon}}
+\newunicodechar{ϵ}{\ensuremath{\varepsilon}}
+\newunicodechar{Ζ}{\ensuremath{\Zeta}}
+\newunicodechar{ζ}{\ensuremath{\zeta}}
+\newunicodechar{Η}{\ensuremath{\Eta}}
+\newunicodechar{η}{\ensuremath{\eta}}
+\newunicodechar{Θ}{\ensuremath{\Theta}}
+\newunicodechar{θ}{\ensuremath{\theta}}
+\newunicodechar{ϑ}{\ensuremath{\vartheta}}
+\newunicodechar{Ι}{\ensuremath{\Iota}}
+\newunicodechar{ι}{\ensuremath{\iota}}
+\newunicodechar{Κ}{\ensuremath{\Kappa}}
+\newunicodechar{κ}{\ensuremath{\kappa}}
+\newunicodechar{Λ}{\ensuremath{\Lambda}}
+\newunicodechar{λ}{\ensuremath{\lambda}}
+\newunicodechar{Μ}{\ensuremath{\Mu}}
+\newunicodechar{μ}{\ensuremath{\mu}}
+\newunicodechar{Ν}{\ensuremath{\Nu}}
+\newunicodechar{ν}{\ensuremath{\nu}}
+\newunicodechar{Ξ}{\ensuremath{\Xi}}
+\newunicodechar{ξ}{\ensuremath{\xi}}
+\newunicodechar{Ο}{\ensuremath{\Omicron}}
+\newunicodechar{ο}{\ensuremath{\omicron}}
+\newunicodechar{Π}{\ensuremath{\Pi}}
+\newunicodechar{π}{\ensuremath{\pi}}
+\newunicodechar{ϖ}{\ensuremath{\varpi}}
+\newunicodechar{Ρ}{\ensuremath{\Rho}}
+\newunicodechar{ρ}{\ensuremath{\rho}}
+\newunicodechar{ϱ}{\ensuremath{\varrho}}
+\newunicodechar{Σ}{\ensuremath{\Sigma}}
+\newunicodechar{σ}{\ensuremath{\sigma}}
+\newunicodechar{ς}{\ensuremath{\varsigma}}
+\newunicodechar{Τ}{\ensuremath{\Tau}}
+\newunicodechar{τ}{\ensuremath{\tau}}
+\newunicodechar{Υ}{\ensuremath{\Upsilon}}
+\newunicodechar{υ}{\ensuremath{\upsilon}}
+\newunicodechar{Φ}{\ensuremath{\Phi}}
+\newunicodechar{φ}{\ensuremath{\phi}}
+\newunicodechar{ϕ}{\ensuremath{\varphi}}
+\newunicodechar{Χ}{\ensuremath{\Chi}}
+\newunicodechar{χ}{\ensuremath{\chi}}
+\newunicodechar{Ψ}{\ensuremath{\Psi}}
+\newunicodechar{ψ}{\ensuremath{\psi}}
+\newunicodechar{Ω}{\ensuremath{\Omega}}
+\newunicodechar{ω}{\ensuremath{\omega}}
+%
+\newunicodechar{𝒰}{\ensuremath{\mathcal{U}}}
+\newunicodechar{ℕ}{\ensuremath{\mathbb{N}}}
+%
+\newunicodechar{¬}{\ensuremath{\neg}}
+\newunicodechar{•}{\ensuremath{\bullet}}
+\newunicodechar{≈}{\ensuremath{\approx}}
+\newunicodechar{≅}{\ensuremath{\cong}}
+\newunicodechar{≡}{\ensuremath{\equiv}}
+\newunicodechar{≤}{\ensuremath{\le}}
+\newunicodechar{≥}{\ensuremath{\ge}}
+\newunicodechar{≠}{\ensuremath{\neq}}
+\newunicodechar{∀}{\ensuremath{\forall}}
+\newunicodechar{∃}{\ensuremath{\exists}}
+\newunicodechar{±}{\ensuremath{\pm}}
+\newunicodechar{∓}{\ensuremath{\pm}}
+\newunicodechar{·}{\ensuremath{\cdot}}
+\newunicodechar{⋯}{\ensuremath{\cdots}}
+\newunicodechar{…}{\ensuremath{\ldots}}
+\newunicodechar{∷}{\ensuremath{~\mathrel{:\!\!\!:}~}}
+\newunicodechar{×}{\ensuremath{\times}}
+\newunicodechar{∞}{\ensuremath{\infty}}
+\newunicodechar{→}{\ensuremath{\to}}
+\newunicodechar{←}{\ensuremath{\leftarrow}}
+\newunicodechar{⇒}{\ensuremath{\Rightarrow}}
+\newunicodechar{↦}{\ensuremath{\mapsto}}
+\newunicodechar{↝}{\ensuremath{\leadsto}}
+\newunicodechar{∨}{\ensuremath{\vee}}
+\newunicodechar{∧}{\ensuremath{\wedge}}
+\newunicodechar{⊢}{\ensuremath{\vdash}}
+\newunicodechar{⊣}{\ensuremath{\dashv}}
+\newunicodechar{∣}{\ensuremath{\mid}}
+\newunicodechar{∈}{\ensuremath{\in}}
+\newunicodechar{⊆}{\ensuremath{\subseteq}}
+\newunicodechar{⋓}{\ensuremath{\Cup}}
+\newunicodechar{∉}{\ensuremath{\not\in}}
+
+\newunicodechar{⊸}{\ensuremath{\multimap}}
+\newunicodechar{⊗}{\ensuremath{\otimes}}
+\newunicodechar{⊕}{\ensuremath{\oplus}}
+\newunicodechar{〈}{\ensuremath{\langle}}
+\newunicodechar{⟨}{\ensuremath{\langle}}
+\newunicodechar{⟩}{\ensuremath{\rangle}}
+\newunicodechar{〉}{\ensuremath{\rangle}}
+\newunicodechar{¡}{\ensuremath{\upsidedownbang}}
+\newunicodechar{∘}{\ensuremath{\circ}}
+\newunicodechar{†}{\ensuremath{\dagger}}
+\newunicodechar{⊤}{\ensuremath{\top}}
+\newunicodechar{⊥}{\ensuremath{\bot}}
+\newunicodechar{≠}{\ensuremath{\neq}}
+\newunicodechar{¡}{\ensuremath{!}}
+\newunicodechar{⧺}{\ensuremath{\doubleplus}}
+
+\newunicodechar{₁}{\ensuremath{_1}}
+
+\usepackage{stmaryrd}
+\newunicodechar{⟦}{\ensuremath{\llbracket}}
+\newunicodechar{⟧}{\ensuremath{\rrbracket}}
+
+%% COMMENTS 
+% \usepackage{etoolbox} % replaces ifthen package
+% \newtoggle{comments}
+% \toggletrue{comments}
+
+% \iftoggle{comments}{
+%   \newcommand{\jennifer}[1]{\textbf{\textcolor{red}{[ #1 --- Jennifer]}}}
+%   \newcommand{\steve}[1]{\textbf{\textcolor{blue}{[ #1 --- Steve]}}}
+
+%   \newcommand{\fixme}[1]{\textbf{\textcolor{red}{[ Fixme: #1]}}}
+%   \newcommand{\note}[1]{\textbf{\textcolor{green}{[ Note: #1 ]}}}
+%   \newcommand{\todo}[1]{\textbf{\textcolor{green}{[ TODO: #1 ]}}}
+% }{
+%   \newcommand{\jennifer}[1]{}
+%   \newcommand{\steve}[1]{}
+
+%   \newcommand{\fixme}[1]{}
+%   \newcommand{\note}[1]{}
+% }
+%% END COMMENTS
+
+%\usepackage{comment}
+\usepackage{draft}
+%\draftfalse
+\drafttrue
+
+\newnote[JP]{jennifer}{red}
+\newnote[SZ]{steve}{blue}
+\newnote{fixme}{green}
+%\newnote{note}{green}
+\newnote{todo}{green}
+\newnote[Cite:]{tocite}{green}
+
+\makeatletter
+% Other comments
+\NewStdDefinerWrappers{DraftFormat}{%
+ \ifdraft
+   \expandafter\@firstoftwo
+ \else
+   \expandafter\@secondoftwo
+ \fi
+ {#5}{\@firstofone}%
+}
+
+\usepackage[normalem]{ulem}
+\usepackage{xcolor}
+% Re-implemented from the ``ul'' package, via Yiannis Lazarides's answer to
+% Aku's TeX Stack Exchange question ``How to color just the wave produced by the
+% ulem package'', available at <http://tex.stackexchange.com/a/7322/1425>.
+\newcommand*{\coloruwave}[1]{%
+ \bgroup
+ \markoverwith{\lower3.5\p@\hbox{\sixly\textcolor{#1}{\char58}}}%
+ \ULon}
+\NewDraftFormat{\awk}{\coloruwave{red}}
+\makeatother
+
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: "main"
+%%% End:

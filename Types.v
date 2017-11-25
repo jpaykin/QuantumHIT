@@ -40,37 +40,9 @@ Section QType.
     
     Definition Tensor' : QType -> QType -> QType.
     Proof.
-    About quotient1_rec2.
-      set (C_point := fun Q1 Q2 => point U_groupoid (Tensor Q1 Q2)).
-    
-      transparent assert (C_cell : (forall x x' y y' 
-                                   (U : UnitaryMatrix x x') 
-                                   (U' : UnitaryMatrix y y'),
-                        C_point x y = C_point x' y')).
-      { unfold C_point. intros.
-        apply cell.
-        apply (U_tensor _ _ _ _ U U').
-      }
-      assert (C_compose : (forall {x1 x2 x3 y1 y2 y3} 
-                           (U1 : UnitaryMatrix x1 x2) (U2 : UnitaryMatrix x2 x3)
-                           (V1 : UnitaryMatrix y1 y2) (V2 : UnitaryMatrix y2 y3),
-        C_cell _ _ _ _ (U2 o U1) (V2 o V1)
-      = C_cell _ _ _ _ U1 V1 @ C_cell _ _ _ _ U2 V2)).
-      { intros.
-        unfold C_cell. 
-        refine (ap _ (U_tensor_compose _ _ _ _ _ _ U1 U2 V1 V2) @ _).
-        apply cell_compose.
-      }
-      assert (C_1Type : IsTrunc 1 QType). { apply quotient1_trunc. }
-      apply quotient1_rec2 with (C_point0 := C_point) 
-                                (C_cell0 := C_cell) 
-                                (C_compose0 := C_compose)
-                                (C_1Type0 := C_1Type).
-      intros.
-        unfold C_cell.
-      admit.
-  Admitted.
-
+      apply quotient1_map2 with (f := Tensor) (map_cell := U_tensor).
+      apply U_tensor_compose.
+    Defined.
 
 Lemma QUnitary_eq : forall {Q1 Q2} (U1 U2 : UnitaryMatrix Q1 Q2),
                   U1 = U2 -> cell U_groupoid U1 = cell U_groupoid U2.
@@ -124,5 +96,7 @@ Admitted.
 
 *)
 Infix "⊗" := Tensor' (at level 40).
+
+
 
 End QType.

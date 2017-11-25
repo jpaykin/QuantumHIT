@@ -1,0 +1,423 @@
+\documentclass{article}
+\input{preamble}
+
+
+\title{Quantum HITs}
+
+\begin{document}
+
+\maketitle
+
+\section{The quantum/non-quantum lambda calculus}
+
+The quantum lambda calculus~\citep{selinger2009} is a linear lambda calculus
+with the addition of a few quantum primitives that is universal for quantum
+computation. In its original formulation the quantum lambda calculus uses the
+$!$ exponential with subtyping to deal with duplicable data, but we will instead
+use the adjoint structure of linear/non-linear logic. The result consists of a
+standard linear/non-linear type system along with a primitive type of qubits and
+a number of primitive operations for manipulating quantum data.
+\begin{align*}
+    α,β &::= \bool ∣ α → β ∣ α × β ∣ \Lift{τ} ∣ ⋯ \\
+    σ,τ &::= \qubit ∣ σ ⊗ τ ∣ σ ⊸ τ ∣  \Lower{α} 
+\end{align*}
+Syntax can similarly be divided between \emph{non-linear terms} and \emph{linear
+  expressions}. Terms are a standard lambda calculus with an additional
+construct for suspended expressions.
+\begin{align*}
+    t &::= \TT ∣ \FF ∣ \ifthen{t}{t_1}{t_0} ∣ λ x.t ∣ t~t' ∣ (t,t') ∣ π_1 t ∣ π_2 t ∣ \suspend{e}
+\end{align*}
+Expressions include the usual constructors for linear pairs and implication. In
+addition, $\force{t}$ forces the evaluation of suspended linear expressions,
+$\put{t}$ injects a term into the expression language, and $\LET!$ extracts that
+term again. We can eliminate non-linear values, such as booleans, inside of
+linear expressions. Finally, the quantum lambda calculus provides three
+additional syntactic forms: qubit initialization, qubit measurement, and unitary
+transformations.
+\begin{align*}
+    e &::= λ x.e ∣ e~e' ∣ (e,e') ∣ \letin{(x,y)}{e}{e'} ∣ \force t ∣ \put t ∣
+        \letin{!x}{e}{e'} ∣ \ifthen{t}{e}{e'} \\
+       &∣ \new t ∣ \meas e ∣ U~e
+\end{align*}
+Here, $U$ ranges over unitary matrices. Every unitary is associated with a type
+$σ$, which we denote $U ∈ 𝒰(σ)$. \cref{fig:LNL_types} shows typing
+rules for terms and expressions; we omit rules for the standard connectives.
+
+\begin{figure}
+\[ \begin{array}{cc}
+    \inferrule*
+    { Γ;·  ⊢ e : τ }
+    { Γ ⊢ \suspend e : \Lift{τ} }
+  &
+    \inferrule*
+    { Γ ⊢ t : \Lift{τ} }
+    { Γ;· ⊢ \force t : τ }
+  \\ \\
+    \inferrule*
+    { Γ ⊢ t : α }
+    { Γ;· ⊢ \put t : \Lower{α} }
+  &
+    \inferrule*
+    { Γ;Δ_1 ⊢ e : \Lower{α} \\ Γ,x:α;Δ_2 ⊢ e' : τ}
+    { Γ;Δ_1,Δ_2 ⊢ \letin{!x}{e}{e'} : τ }
+  \\ \\
+    \inferrule*
+    { Γ ⊢ t : \bool }
+    { Γ;· ⊢ \new t : \qubit }
+  &
+    \inferrule*
+    { Γ;Δ ⊢ e : \qubit }
+    { Γ;Δ ⊢ \meas e : \Lower \bool }
+  \\ \\
+    \inferrule*
+    { Γ;Δ ⊢ e : σ \\ U ∈ 𝒰(σ) }
+    { Γ;Δ ⊢ U~e : σ }
+\end{array} \]
+\caption{Typing of QNQ connectives}
+\label{fig:LNL_types}
+\end{figure}
+
+We can give a pure operational semantics for terms (where $\suspend e$ is a
+value) and a probabilistic operational semantics for expressions, where states
+are represented by quantum closures.
+
+\begin{definition}
+    A quantum closure is a tuple $(Q,L,e)$ where 
+    \begin{itemize}
+      \item $Q$ is an n-dimensional pure quantum state, so a normalized complex
+        vector of size $n^2$; and
+      \item $L$ is a list of $n$ linear variables, written $\ket{x_1,…,x_n}$;
+      \item $e$ is an expression whose free variables all occur in $L$.
+    \end{itemize}
+\end{definition}
+
+We write $v^e$ for linear values and $v^t$ for term values. Linear values may
+contain free (linear) variables, since they will always be evaluated under
+closures.
+\begin{align*}
+    v^t &::= \TT ∣ \FF ∣ λx.t ∣ (v^t_1,v^t_2) ∣ \suspend e \\
+    v^e &::= x ∣ λ x.e ∣ (v^e_1,v^e_2) ∣ \put{v^t}
+\end{align*}
+
+For the non-quantum expressions, we can give the usual $β$, in addition to the
+usual congruence rules. We choose a call-by-value evaluation semantics, but
+could have equivalently (?) chosen call by name. I believe the evaluation order
+for terms can be independent of the one for expressions. \todo{Check both
+  these facts}
+\[ \begin{array}{ccc}
+    \inferrule*
+    { e_1 ↝ e_1' }
+    { e_1 e_2 ↝ e_1' e_2 }
+   &
+    \inferrule*
+    { e_2 ↝ e_2' }
+    { v_1 e_2 ↝ v_1 e_2' }
+   &
+    \inferrule*
+    {~}
+    { (λ x.e) v ↝ e\{v/x\} }
+  \\ \\
+    \inferrule*
+    { e_1 ↝ e_1' }
+    { \letin{!x}{e_1}{e_2} ↝ \letin{!x}{e_1'}{e_2} }
+  &
+    \inferrule*
+    { t ↝ t' }
+    { \put t ↝ \put{t'} }
+  &
+    \inferrule*
+    {~}
+    { \letin{!x}{\put v}{e} ↝ e\{v/x\} }
+\end{array} \]
+Similarly for pairs.
+
+A value closure is one of the form $(Q,L,v^e)$. The reduction rules for closures
+are probabilistic, where $(Q,L,e) ↝_p (Q',L',e')$ indicates that the probability
+of the step is $p$. The reduction rules for closures are given in
+\cref{fig:closure_reduction}. For the measurement rules, a quantum state $Q$ can
+always be uniquely partitioned around a particular qubit as $α Q_0 + β Q_1$. For
+more details see \citet{selinger2009}.
+
+
+\begin{figure}
+\[ \begin{array}{c}
+    \inferrule*
+    {e ↝ e'}
+    {(Q,L,e) ↝_1 (Q,L,e')}
+  \\ \\
+    \inferrule*
+    { \text{$Q'$ is the result of applying $U$ to qubits $L[x_1],…,L[x_m]$ in $Q$} }
+    { (Q,L,U(x_1,…,x_n)) ↝_1 (Q',L,(x_1,…,x_n)) }
+  \\ \\
+    \inferrule*
+    { y ∉ \vec{xs} }
+    { (Q,\vec{xs},\new b) ↝_1 (Q ⊗ \ket{b}, \vec{xs}⧺y, y) }
+  \\ \\
+    \inferrule*
+    { Q_b = \sum_{j} α^b_j \ket{φ^b}\ket{b}\ket{ψ^b}
+    \\
+      |\ket{φ^b}| = |\vec{xs}|
+    \\
+      Q' = \sum_{j} α^\FF \ket{φ^\FF}\ket{ψ^\FF}
+    }
+    {      (α Q_0 + β Q_1,\vec{xs}⧺x⧺\vec{ys},\meas{x}) 
+    ↝_{α^2} (Q',\vec{xs}⧺\vec{ys},\put{\FF}) }
+  \\ \\
+    \inferrule*
+    { Q_b = \sum_{j} α^b_j \ket{φ^b}\ket{b}\ket{ψ^b}
+    \\
+      |\ket{φ^b}| = |\vec{xs}|
+    \\
+      Q' = \sum_{j} α^\TT \ket{φ^\TT}\ket{ψ^\TT}
+    }
+    {      (α Q_0 + β Q_1,\vec{xs}⧺x⧺\vec{ys},\meas{x}) 
+    ↝_{β^2} (Q',\vec{xs}⧺\vec{ys},\put{\TT}) }
+\end{array} \]
+\caption{Probabilistic reduction rules for closures}
+\label{fig:closure_reduction}
+\end{figure}
+
+\subsection{Equational theory}
+
+What does it mean for two expressions to be equivalent under this semantics?
+Certainly, this should encompass $β$ and $η$ equivalence. However, we also
+expect other equivalences between quantum programs to hold, as well. For
+example:
+\begin{itemize}
+    \item $U_1 (U_2 e) = (U_1 U_2) e$ (where $U_1 U_2$ denotes matrix
+      multiplication)
+    \item $(U_1 ⊗ U_2) (e_1,e_2) = (U_1 e_1,U_2 e_2)$
+    \item $\meas{(\new{t})} = \put{t}$
+    \item $\letin{!\_}{\meas{(U e)}}{e'} = \letin{!\_}{e}{e'}$
+    \item $X~(\new{t}) = \new{(¬t)}$, where $X$ is the quantum not gate
+    \item $\IF_{U_0,U_1}(\new b,e) = (\new b, \ifthen{b}{U_1 e}{U_0 e})$, where
+      $\IF_{U_0,U_1}$ is the unitary gate that applies to a pair $(q,e)$ and
+      implements $(q,q\ifthen{q}{U_1 e}{U_0 e})$
+    \item $[\letin{!z}{\meas e}{\ifthen{z}{U_1 e'}{U_0 e'}}]
+          = [\letin{(x,y)}{\IF_{U_0,U_1}(e,e')}{\letin{!_}{\meas x}{y}}]$
+\end{itemize}
+
+
+Equational theories for quantum languages based on the circuit model have been
+explored before by \citet{selinger2004}, as well as by \citet{staton2015}, on
+whose complete equational theory our system will be based. Staton gives an
+algebraic theory with five ``interesting'' axioms (3-8 here) and seven
+``administrative'' axioms, including 1 and 2 here. 
+
+\subsection{Equational theory in QNQ}
+
+First, $β$ and $η$ equivalence:
+\[\begin{aligned}
+    (λ x.e) e' &=_β e\{e'/x\}x \\
+    \letin{(x_1,x_2)}{(e_1,e_2)}{e} &=_β e\{e_1/x_1, e_2/x_2\} \\
+    \letin{!x}{\put{t}}{e'} &=_β e'\{t/x\} \\
+    \force{\suspend e} &=_β e \\
+    \ifthen{\TT}{e}{e'} &=_β e \\
+    \ifthen{\FF}{e}{e'} &=_β e' 
+\end{aligned} \quad \begin{aligned}
+    λ x. f x &=_η f \\
+    \letin{(x_1,x_2)}{e}{e'\{(x_1,x_2)/z\}} &=_η e'\{e/z\} \\
+    \letin{!x}{e}{e'\{\put{x}/z\}} &=_η e'\{e/z\} \\
+    \suspend{\force t} &=_η t \\
+    \ifthen{t}{e\{\TT/z\}}{e\{\FF/z\}} &=_η e\{t/z\} \\
+\end{aligned} \]
+
+Next, we consider the ``interesting'' axioms from \citet{staton2015}. Unitaries
+can be thought of as being generated by\footnotemark the single-qubit unitaries,
+plus two monoidal structures: the tensor product $⊗$, and quantum alternation,
+$⊕$. Alternation can be thought of as a quantum ``if'' statement:
+$(U1 ⊕ U2)(q,q')$ can be thought of as $(q,q\ifthen{q}{U1(q')}{U2(q')})$.
+
+
+\footnotetext{Of course, the unitaries are not \emph{freely} generated by these
+  structures, since the results are not unique. However, this collection does
+  construct a universal set.}
+
+
+The axioms come in two groups. The first describes the behavior of unitaries.
+\begin{align}
+    X (\new b) &= \new{(¬ b)} \\
+    (U_1 ⊕ U_2) (\new{b},e) &= (\new{b}, \ifthen{b}{U_1 e}{U_2 e}) \\
+    SWAP(e_1,e_2) &= (e_2,e_1)
+\end{align}
+The next set of axioms describes the behavior of measurement.
+\begin{align}
+    \meas{(X e)} &= \letin{!x}{\meas e}{\put{(¬ x)}} \\
+    \letin{(a,b)}{(U_1 ⊕ U_2)(e,e')}{\letin{!x}{\meas{a}}{e''}} 
+    &= \letin{!x}{\meas e}{\letin{b}{(\ifthen{x}{U_1 e'}{U_0 e'})}{e''}} \\
+    \meas{\new b} &= \put{b}
+\end{align}
+
+\begin{note}
+  Staton calls axiom (3) a structural axiom, not interesting, and does not even
+  include axiom (1) because in his algebraic theory, all qubits are initialized
+  to 0.
+\end{note}
+
+The other axioms, including one of Staton's interesting axioms, can be derived
+using the homotopy type theoretic structure of unitaries, described in the next section.
+
+
+\section{Quotients}
+
+
+Consider the category $𝒰$ of finite-dimensional Hilbert spaces and unitary maps.
+That is, a morphism in $𝒰$ between $H$ and $H'$ is an invertible linear map $f$
+such that $f^† = f^{-1}$. Since all unitary maps are isomorphisms, $𝒰$ forms a
+groupoid. It is also symmetric monoidal, given by the tensor product, and is in fact 
+dagger symmetric. Although $\Hilb$, the category of finite-dimensional Hilbert
+spaces and linear maps is compact closed, $𝒰$ is not because the unit
+$η_A : 1 → A^* ⊗ A$ and counit $ε_A : A ⊗ A → 1$ are not unitary.
+
+
+The groupoid-quotient or 1-quotient of a type $A$ by a groupoid $G$ is a higher
+inductive type generated by: \todo{cite}
+\begin{enumerate}
+    \item for each $a : A$, a point $\mathtt{point}~a : \mathtt{quotient}_1 A$;
+    \item for every morphism $f : G x y$, a 1-cell
+      \[\mathtt{cell}~f : \mathtt{point}~x = \mathtt{point}~y;\]
+    \item a proof that equality respects the groupoid structure:
+        for $f : G x y$ and $g : G y z$, a 2-cell \texttt{cell\_compose} of type
+      \[ \mathtt{cell}(g ∘ f) = \mathtt{cell}~f @ \mathtt{cell}~g; \]
+    \item a proof that the type $\mathtt{quotient}_1 A$ is a 1-type.
+\end{enumerate}
+
+\paragraph{Recursion principle}
+
+The recursion principle states that given a 1-type C along with
+\begin{enumerate}
+    \item for each \hcode{a : A}, a point \hcode{C_point a : C};
+    \item for each \hcode{f : G a b}, a path 
+          \hcode{C_cell f : C_point a = C_point b}; and
+    \item For each \hcode{f : G x y} and \hcode{g : G y z}, a path
+          \hcode{C_compose : C_cell (g o f) = C_cell f @ C_cell g};
+\end{enumerate}
+there is a function \hcode{quotient1_rec : quotient₁ G -> C} such that
+\begin{haskell}
+    quotient1_rec (point a) = C_point a
+    transport quotient1_rec (cell f)  = C_cell f
+\end{haskell}
+%    ap₂ quotient1_rec (cell_compose f g) = something
+The computation rule for \hcode{cell_compose} is given in the formal
+development; it is somewhat complex to write down.
+
+\paragraph{Induction scheme}
+
+The induction principle states that given a predicate 
+\hcode{P :: quotient₁ G -> Type}, along with
+\begin{enumerate}
+    \item for each \hcode{x :: quotient₁ G}, a proof that \hcode{P x} is a
+      1-type;
+    \item for each \hcode{a : A}, a proof \hcode{P_point a} that \hcode{P} holds
+      on \hcode{point a};
+    \item for \hcode{f : R a b}, a proof \hcode{P_cell f} that
+      \hcode{cell f # P_point a = P_point b}; and
+    \item for \hcode{f : R a b} and \hcode{g : R b c}, a proof 
+      \hcode{P_compose f g} that
+    \begin{haskell}
+  P_cell (g o f) = transport2 (cell_compose f g)(P_point x)
+                 @ transport_pp
+                 @ ap (P_cell f)
+                 @ P_cell g 
+    \end{haskell}
+\end{enumerate}
+then there exists a function \hcode{quotient1_ind : forall x, P x} such that
+\begin{haskell}
+    quotient1_ind (cell f) = P_cell f
+    apD quotient1_ind (cell f) = P_cell f
+\end{haskell}
+%    apD02 quotient1_ind (cell_compose f g) = something
+Again, the computation rule for \hcode{cell_compose} is given in the
+development. \todo{This should probably be spelled out here.}
+
+\paragraph{Other induction schemes}
+
+From the induction hypothesis we can prove the recursion scheme, as well as a
+number of variations. Consider the following:
+
+Given a function \hcode{f :: A -> B -> C}, where $G_A$, $G_B$, and $G_C$ are
+groupoids over $A$, $B$, and $C$ respectively, given:
+\begin{enumerate}
+    \item for each $α : G_A(a_1,a_2)$ and $β : G_B(b_1,b_2)$, a morphism
+        \hcode{map_cell α β} in $G_C (f a_1 b_1, f a_2 b_2)$; and
+    \item for $α_1 : G_A(a_1,a_2)$, $α_2 : G_A(a_2,a_3)$, $β_1 : G_B (b_1,b_2)$,
+        and $β_2 : G_B (b_2,b_3)$, a path \hcode{map_compose} of
+        type
+      \begin{haskell}
+    map_cell (α₂ o α₁) (β₂ o β₁) = map_cell α₂ β₂ o map_cell α₁ β₁
+      \end{haskell}
+\end{enumerate}
+
+Then there is a function \hcode{quotient1_map2 :: quotient₁ G_A -> quotient₁ G_B
+  -> quotient₁ G_C} such that 
+\begin{haskell}
+    quotient1_map2 (point a) (point b) = point (f a b)
+\end{haskell}
+and \jennifer{higher computation rules}
+
+\section{Quotients of quantum types}
+
+Consider the type of quantum data types:
+\begin{haskell}
+data QType where
+  Qubit  :: QType
+  Tensor :: QType -> QType -> QType
+  Lolli  :: QType -> QType -> QType
+  Lower  :: Type -> QType
+type q1 ⊗ q2 = Tensor q1 q2
+type q1 ⊸ q2 = Lolli q1 q2
+\end{haskell}
+
+We map every \hcode{QType} to a finite-dimensional Hilbert space corresponding
+to the quantum data it carries---this means that all classical types are mapped
+to the unit state.
+\begin{haskell}
+⟦_⟧ :: Qtype -> VecSpace
+⟦Qubit⟧   = 1 ⊕ 1
+⟦q1 ⊗ q2⟧ = ⟦q1⟧ ⊗ ⟦q2⟧
+⟦q1 ⊸ q2⟧ = ⟦q1⟧ ⊗ ⟦q2⟧
+⟦Lower τ⟧ = 1
+\end{haskell}
+
+Consider the groupoid $\mathcal{U}$ whose objects are \hcode{QType}s, and whose
+morphisms $\mathcal{U}(q_1,q_2)$ are unitary transformations $U : ⟦q_1⟧ ⊸ ⟦q_2⟧$,
+when $⟦q_1⟧=⟦q_2⟧$. \jennifer{Restrict morphisms to q1 = q2?} Identity,
+composition, and invertibility of $\mathcal{U}$ are all inherited from the
+structure of the unitaries.
+
+Define the type \hcode{UType} to be the groupoid-quotient of \hcode{QType} by
+$\mathcal{U}$.
+
+The $⊗$ and $⊸$ constructions are lifted to \hcode{UType}s using the
+\hcode{quotient1_map2} construction detailed above. Because
+for $U_1 : \mathcal{U}(q_1,r_1)$ and $U_2 : \mathcal{U}(q_2,r_2)$,
+we obtain $U_1 ⊗ U_2 : \mathcal{U}(q_1 ⊗ q_2, r_1 ⊗ r_2)$, we just need to check
+the following property:
+
+\begin{lemma}
+    Given $U : \mathcal{U}(q_1,q_2)$, $U' : \mathcal{U}(q_2,q_3)$,
+    and $V : \mathcal{U}(r_1,r_2)$, $V' : \mathcal{V}(r_2,r_3)$,
+    it should be the case that
+    $(U' ∘ U) ⊗ (V' ∘ V) = (U' ⊗ V') ∘ (U ⊗ V)$.
+\end{lemma}
+This is true; see the Matrix development of
+QWire\footnote{\url{github.com/jpaykin/qwire}}.
+
+
+
+\subsection{Quantum terms}
+
+
+
+
+
+
+\bibliography{bibliography}
+\bibliographystyle{plainnat}
+\end{document}
+
+
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: t
+%%% End:
