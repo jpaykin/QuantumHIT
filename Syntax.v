@@ -1,13 +1,92 @@
 Require Import HoTT.
 Add LoadPath "./LinearTypingContexts/" as LinearTypingContexts.
-Require LinearTypingContexts.Monad.
+(*Require LinearTypingContexts.Monad.
 Require Import LinearTypingContexts.Monad.
 Require Import LinearTypingContexts.NCM.
 Require Import LinearTypingContexts.Permutation.
 Require Import LinearTypingContexts.SetContext.
-Require Import HIT.
+Require Import HIT.*)
+Require Import QTypes.
 
-Section Syntax.
+Section Exp.
+  
+  Variable Var : QType -> Type.
+
+  Inductive Exp : QType -> Type :=
+  | var' {q} : Var q -> Exp q
+  | abs' {q r} : (Var q -> Exp r) -> Exp (q ⊸ r)
+  .
+End Exp.
+
+Arguments var' {Var} {q}.
+Arguments abs' {Var} {q r}.
+
+Section Flatten.
+  Variable Var : QType -> Type.
+
+  Fixpoint flatten {q} (e : Exp (Exp Var) q) : Exp Var q.
+(*    match e with
+      | var' _ e' => e'
+      | abs' _ _ f  => abs' (fun x => flatten _ (f (var' x)))
+    end.*)
+  Proof.
+    destruct e as [ q x | q r f].
+    * exact x.
+    * exact (abs' (fun x => flatten _ (f (var' x)))).
+  Defined.
+End Flatten.
+
+
+Definition QExp q := forall Var, Exp Var q.
+
+Definition QExp1 t1 t2 := forall var, var t1 -> Exp var t2.
+Definition abs dom ran (f : QExp1 dom ran) : QExp (dom ⊸ ran) :=
+  fun _ => abs' (f _).
+
+
+Inductive Closed_QExp : forall {q}, QExp q -> Type :=
+| closed_abs : forall {q r} (f : QExp1 q r), Closed_QExp (abs q r f).
+Axiom closed : forall {q} (e : QExp q), Closed_QExp e.
+(* Can't prove this in Coq, but should be true by parametricity. See HOAS
+chapter of CPDT. *)
+
+(* I think this property should be true.. *)
+Lemma lolli_inv : forall q q' r r',
+      q ⊸ r = q' ⊸ r' ->
+      q = q' /\ r = r'.
+Admitted.
+
+
+Definition app {q r} (e : QExp (q ⊸ r)) : QExp q -> QExp r.
+Proof.
+  remember (q ⊸ r) as s eqn:Hs.
+  destruct (closed e).
+
+  apply lolli_inv in Hs; destruct Hs as [Hq Hr]; rewrite Hq, Hr; clear Hq; clear Hr.
+
+  intros e Var.
+  refine (flatten _ (f _ (e _))).
+Defined.
+
+
+(* Untyped syntax *)
+Inductive Exp' (exp : QType -> Type) : QType -> Type :=
+| Abs : forall {q r}, (exp q -> Exp' exp r) -> Exp' exp (q ⊸ r).
+Arguments Abs {exp} {q r} f.
+
+Definition app {exp} {q r} (e : Exp' exp (q ⊸ r)) : Exp' exp q -> Exp' exp r.
+Proof.
+  remember (q ⊸ r) as s eqn:Hs.
+  generalize dependent Hs.
+  destruct e as [q' r' f]; intros eq.
+  (* so we know that q ⊸ r = q' ⊸ r', but that doesn't tell us that q=q' or r=r'? *)
+  (* I think we should be able to derive those facts *)
+  assert (Hq : q = q') by admit.
+  assert (Hr : r = r') by admit.
+  rewrite Hq, Hr.
+  exact f.
+  
+
 Set Implicit Arguments.
 
 Inductive Extend {A} (a : A) (X : Type) : Type :=

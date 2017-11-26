@@ -403,13 +403,116 @@ the following property:
 This is true; see the Matrix development of
 QWire\footnote{\url{github.com/jpaykin/qwire}}.
 
-
+For the sake of convenience, we use \hcode{Qubit} for \hcode{point Qubit}, etc,
+when the usage is clear from context.
 
 \subsection{Quantum terms}
 
 
+We define quantum expressions indexed by a \hcode{UType} as follows:
+\begin{haskell}
+data QExp :: UType -> Type where
+  Abs   :: (QExp q -> QExp r) -> QExp (q ⊸ r)
+  Pair  :: QExp q -> QExp r -> QExp (q ⊗ r)
+  New   :: Bool -> QExp Qubit
+  Put     :: τ -> QExp (Lower τ)
+\end{haskell}
+%%  Meas  :: QExp Qubit -> QExp (Lower Bool)
+We use higher-order abstract syntax to represent variable bindings. (A linearity
+check can be defined using a separate judgment, \hcode{Lin :: Ctx -> UType ->
+  Type}.) This way we need not encode a separate judgment for $\alpha$, $\beta$,
+or $\eta$ equality. For example, we define function application as follows:
+\begin{haskell}
+app :: QExp (q ⊸ r) -> QExp q -> QExp r
+app (Abs f) e = f e
+\end{haskell}
+so $β$ equality follows judgmentally, and $η$ equality can be proved by
+induction on the expression:
+\begin{haskell}
+lolli_eta :: ∀ (e :: QExp (q ⊸ r)) -> e = Abs (λ x → app e x)
+lolli_eta (Abs f) = refl
+\end{haskell}
+\jennifer{Is there really a point of doing this?}
 
 
+We can similarly define both $⊗$ and \hcode{Lower} elimination in this way:
+\begin{haskell}
+(>!) :: QExp (Lower τ) -> (τ -> QExp q) -> QExp q
+Put a >! f = f a
+\end{haskell}
+
+We can similarly prove $η$ equality, as well as commuting conversions:
+\begin{haskell}
+lower_eta :: ∀ (e :: QExp (Lower τ)) -> e = LetBang e (λ x → Put x)
+lower_eta (Put a) = refl
+
+lower_cc :: ∀ (e :: QExp (Lower σ)) (f :: σ -> QExp (Lower τ)) (f' :: τ -> QExp q)
+             (e >! f) >! f' = e >! (λ x → f x >! f')
+lower_cc (Put a) = refl -- LHS = f a >! f'
+                        -- RHS = f a >! f'
+\end{haskell}
+
+Somewhat surprisingly, we also define measurement by case analysis:
+\begin{haskell}
+meas :: QExp Qubit -> QExp (Lower Bool)
+meas (new b) = put b
+\end{haskell}
+
+Critically we \emph{do not} include unitary transformations as \hcode{QExp}
+constructors, or by case analysis on expressions. Instead, unitary
+transformations are encoded in the non-trivial equalities between
+\hcode{UTypes}.
+\begin{haskell}
+unitary :: ∀ {q1 q2} (u : q1 = q2) -> QExp q1 -> QExp q2
+unitary refl e = e -- in other words, exactly 'transport'
+\end{haskell}
+
+This means that, for example, \hcode{meas (unitary H (New false))} will
+\emph{not} reduce to a value, as it shouldn't! 
+
+\jennifer{I don't think the HOAS approach really makes sense, but we can just
+  have a simple lambda calculus with deterministic operational semantics.}
+\jennifer{Actually, maybe it still will work? see Coq code}
+
+\section{Derived Equations}
+
+\begin{proposition}
+  For \hcode{U1 : q1 = q2}, \hcode{U2 : q2 = q3} and \hcode{e : Exp q1},
+  \begin{haskell}
+    unitary U2 (unitary U1 e) = Unitary (U2 o U1) e
+  \end{haskell}
+\end{proposition}
+\begin{proof} 
+    By induction on \hcode{U1}.
+\end{proof}
+
+\begin{proposition}
+  For \hcode{U1 : q1 = q1'} and \hcode{U2 : q2 = q2'}, 
+  \begin{haskell}
+    unitary (U1 ⊗ U2) (e1,e2) = (unitary U1 e1, unitary U2 e2)
+  \end{haskell}
+    where \hcode{U1 ⊗ U2 : q1 ⊗ q2 = q1' ⊗ q2'} is defined by induction on
+    \hcode{U1} or \hcode{U2}.
+\end{proposition}
+\begin{proof}
+    By induction on \hcode{U1} and \hcode{U2}
+\end{proof}
+
+\begin{proposition}
+  For \hcode{U : q1 = q2}, 
+  \begin{haskell}
+    meas_any (unitary U e) >! (fun _ => e') = meas_any e >! (fun _ => e')
+  \end{haskell}
+  where \hcode{meas_any : Exp q -> Exp (Lower (toClassical q))}
+  extends measurement to all of the qubit values in an expression.
+  \jennifer{this could just be the default, for that matter}
+\end{proposition}
+\begin{proof}
+  By induction on \hcode{U}. Notice that this proof would not go through for
+  single-qubit measurement, because it is not possible to do induction on
+  \hcode{U : Qubit = Qubit}. This makes it hard to extend this approach to
+  the quantum alternation lemmas e.g. (5).
+\end{proof}
 
 
 \bibliography{bibliography}
