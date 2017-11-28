@@ -71,6 +71,59 @@ Proof.
 Qed. (* Do we need to go the other way? Does that even make sense? *)
      (* No, we would need [U : QTy Q1 = QTy Q2] = ||UnitaryMatrix Q1 Q2|| *)
 
+Print QType'. Print TruncType. 
+Fixpoint to_classical' (q : QType') : Type :=
+  match q with
+  | Qubit'        => Bool
+  | Tensor' q1 q2 => to_classical' q1 * to_classical' q2
+  | Lolli'  q1 q2 => Unit
+  | Lower' τ _    => τ
+  end.
+
+Print hset_bool.
+Search (PathCollapsible Bool).
+About hset_pathcoll.
+Print hset_pathcoll.
+Print collapse.
+
+Global Instance decidable_paths_unit : DecidablePaths Unit.
+Proof.
+  intros [] []. left. auto.
+Qed.
+
+Corollary hset_unit : IsHSet Unit.
+Proof.
+  exact _.
+Qed.
+
+Instance to_classical_is_trunc : forall q, IsHSet (to_classical' q).
+Proof.
+  induction q; intros; auto.
+  * simpl. apply hset_bool.
+  * simpl. exact _. 
+  * simpl. exact _.
+Qed.
+
+Definition to_classical_1type (q : QType') : TruncType 0 :=
+  {| trunctype_type := to_classical' q |}.
+    
+(* Can't prove this from the axioms we have, but is reasonable *)
+Axiom to_classical_cell : forall {q r} (U : UnitaryMatrix q r), 
+    to_classical_1type q = to_classical_1type r.
+Axiom to_classical_linear : 
+      forall {q r s} (U : UnitaryMatrix q r) (V : UnitaryMatrix r s),
+      to_classical_cell (V o U) = to_classical_cell U @ to_classical_cell V.
+
+(* need univalence to show that HSet is a 0-type? *)
+Definition to_classical `{Univalence} : QType -> TruncType 0.
+Proof.
+  apply quotient1_rec with (C_point := to_classical_1type) 
+                           (C_cell := @to_classical_cell).
+  -- apply @to_classical_linear.
+  -- exact _.
+Defined.
+  
+
 Definition toUnitary : QType -> QType'.
 Proof.
   apply quotient1_rec_set with (C_point := fun Q => Q); [ | apply QType'_HSet].
@@ -82,5 +135,11 @@ End QType.
 
 Infix "⊗" := Tensor (at level 40).
 Infix "⊸" := Lolli (at level 40).
+
+(* I think this property should be true.. *)
+Lemma lolli_inv : forall q q' r r',
+      q ⊸ r = q' ⊸ r' ->
+      q = q' /\ r = r'.
+Admitted.
 
 

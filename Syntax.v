@@ -1,261 +1,201 @@
 Require Import HoTT.
-Add LoadPath "./LinearTypingContexts/" as LinearTypingContexts.
-(*Require LinearTypingContexts.Monad.
-Require Import LinearTypingContexts.Monad.
-Require Import LinearTypingContexts.NCM.
-Require Import LinearTypingContexts.Permutation.
-Require Import LinearTypingContexts.SetContext.
-Require Import HIT.*)
+Require Import quotient1.
 Require Import QTypes.
+
 
 Section Exp.
   
   Variable Var : QType -> Type.
 
-  Inductive Exp : QType -> Type :=
-  | var' {q} : Var q -> Exp q
-  | abs' {q r} : (Var q -> Exp r) -> Exp (q ⊸ r)
+  Inductive exp : QType -> Type :=
+  | var {q} : Var q -> exp q
+  | abs {q r} : (Var q -> exp r) -> exp (q ⊸ r)
+  | app {q r} : exp (q ⊸ r) -> exp q -> exp r
+  | pair {q r} : exp q -> exp r -> exp (q ⊗ r)
+  | let_pair {q r s} : exp (q ⊗ r) -> (Var q -> Var r -> exp s) -> exp s
+  | put {τ} `{IsHSet τ} : τ -> exp (Lower τ)
+  | let_bang {τ} `{IsHSet τ} {q} : exp (Lower τ) -> (τ -> exp q) -> exp q
+  | new : Bool -> exp Qubit
+  | meas : exp Qubit -> exp (Lower Bool)
   .
+
+  Inductive is_value : forall {q}, exp q -> Type :=
+  | v_abs {q r} (f : Var q -> exp r) : is_value (abs f)
+  | v_pair {q r} (e1 : exp q) (e2 : exp r) : is_value e1 -> 
+                                             is_value e2 -> 
+                                             is_value (pair e1 e2)
+  | v_put {τ} `{IsHSet τ} (x : τ) : is_value (put x)
+  | v_new (b : Bool) : is_value (new b)
+  .
+
 End Exp.
 
-Arguments var' {Var} {q}.
-Arguments abs' {Var} {q r}.
+Arguments var {Var} {q}.
+Arguments abs {Var} {q r}.
+Arguments app {Var} {q r}.
+Arguments pair {Var} {q r}.
+Arguments let_pair {Var} {q r s}.
+Arguments put {Var} {τ} {hset} : rename.
+Arguments let_bang {Var} {τ} {hset} {q} : rename.
+Arguments new {Var}.
+Arguments meas {Var}.
 
-Section Flatten.
+
+(**************)
+(* flattening *)
+(**************)
+
+Section Squash.
   Variable Var : QType -> Type.
 
-  Fixpoint flatten {q} (e : Exp (Exp Var) q) : Exp Var q.
-(*    match e with
-      | var' _ e' => e'
-      | abs' _ _ f  => abs' (fun x => flatten _ (f (var' x)))
-    end.*)
+  Fixpoint squash {q} (e : exp (exp Var) q) : exp Var q.
   Proof.
-    destruct e as [ q x | q r f].
+    destruct e as [ q x | q r f | q r e1 e2 (* abstraction *)
+                  | q r e1 e2 | q r s e e' (* pairs *)
+                  | τ H x | τ H q e e' (* let! *)
+                  | | e (* new *) ].
     * exact x.
-    * exact (abs' (fun x => flatten _ (f (var' x)))).
+    * exact (abs (fun x => squash _ (f (var x)))).
+    * exact (app (squash _ e1) (squash _ e2)).
+    * exact (pair (squash _ e1) (squash _ e2)).
+    * exact (let_pair (squash _ e) (fun x1 x2 => squash _ (e' (var x1) (var x2)))).
+    * exact (put x).
+    * exact (let_bang (squash _ e) (fun x => squash _ (e' x))).
+    * exact (new b).
+    * exact (meas (squash _ e)).
   Defined.
-End Flatten.
+End Squash.
+Arguments squash {Var} {q}.
+
+(* Polymorphic expressions *)
+
+Definition Exp q := forall Var, exp Var q.
+Definition Exp1 q r := forall Var, Var q -> exp Var r.
+Definition Exp2 q r s := forall Var, Var q -> Var r -> exp Var s.
+Notation "q --o r" := (Exp1 q r) (at level 30).
+
+Definition Subst {q r} (f : q --o r) (e : Exp q) : Exp r := fun Var =>
+  squash (f (exp Var) (e Var)).
+
+Definition Subst2 {q r s} (f : Exp2 q r s) (e1 : Exp q) (e2 : Exp r) : Exp s := 
+  fun Var => squash (f (exp Var) (e1 Var) (e2 Var)).
 
 
-Definition QExp q := forall Var, Exp Var q.
+Definition Abs {q r} (f : q --o r) : Exp (q ⊸ r) := fun Var =>
+    abs (f Var).
+Definition App {q r} (e : Exp (q ⊸ r)) (e' : Exp q) : Exp r := fun Var =>
+    app (e Var) (e' Var).
 
-Definition QExp1 t1 t2 := forall var, var t1 -> Exp var t2.
-Definition abs dom ran (f : QExp1 dom ran) : QExp (dom ⊸ ran) :=
-  fun _ => abs' (f _).
+Definition Pair {q r} (e1 : Exp q) (e2 : Exp r) : Exp (q ⊗ r) := fun Var =>
+    pair (e1 Var) (e2 Var).
+Definition Let_Pair {q r s} (e : Exp (q ⊗ r)) (f : Exp2 q r s) : Exp s := fun Var =>
+    let_pair (e Var) (f Var).
 
+Definition Put {τ} `{IsHSet τ} (x : τ) : Exp (Lower τ) := fun _ => put x.
+Definition Let_Bang {τ} `{IsHSet τ} {q} 
+           (e : Exp (Lower τ)) (f : τ -> Exp q) : Exp q := fun Var =>
+    let_bang (e Var) (fun x => f x Var).
 
-Inductive Closed_QExp : forall {q}, QExp q -> Type :=
-| closed_abs : forall {q r} (f : QExp1 q r), Closed_QExp (abs q r f).
-Axiom closed : forall {q} (e : QExp q), Closed_QExp e.
-(* Can't prove this in Coq, but should be true by parametricity. See HOAS
-chapter of CPDT. *)
-
-(* I think this property should be true.. *)
-Lemma lolli_inv : forall q q' r r',
-      q ⊸ r = q' ⊸ r' ->
-      q = q' /\ r = r'.
-Admitted.
-
-
-Definition app {q r} (e : QExp (q ⊸ r)) : QExp q -> QExp r.
-Proof.
-  remember (q ⊸ r) as s eqn:Hs.
-  destruct (closed e).
-
-  apply lolli_inv in Hs; destruct Hs as [Hq Hr]; rewrite Hq, Hr; clear Hq; clear Hr.
-
-  intros e Var.
-  refine (flatten _ (f _ (e _))).
-Defined.
+Definition New (b : Bool) : Exp Qubit := fun _ => new b.
+Definition Meas (e : Exp Qubit) : Exp (Lower Bool) := fun Var =>
+    meas (e Var).
 
 
-(* Untyped syntax *)
-Inductive Exp' (exp : QType -> Type) : QType -> Type :=
-| Abs : forall {q r}, (exp q -> Exp' exp r) -> Exp' exp (q ⊸ r).
-Arguments Abs {exp} {q r} f.
+(*************************)
+(* Operational semantics *)
+(*************************)
 
-Definition app {exp} {q r} (e : Exp' exp (q ⊸ r)) : Exp' exp q -> Exp' exp r.
-Proof.
-  remember (q ⊸ r) as s eqn:Hs.
-  generalize dependent Hs.
-  destruct e as [q' r' f]; intros eq.
-  (* so we know that q ⊸ r = q' ⊸ r', but that doesn't tell us that q=q' or r=r'? *)
-  (* I think we should be able to derive those facts *)
-  assert (Hq : q = q') by admit.
-  assert (Hr : r = r') by admit.
-  rewrite Hq, Hr.
-  exact f.
-  
+Inductive β : forall {q}, Exp q -> Exp q -> Type :=
+| β_lolli {q r} (f : q --o r) (e : Exp q) : 
+    β (App (Abs f) e) (Subst f e)
 
-Set Implicit Arguments.
+| β_tensor {q r s} (e1 : Exp q) (e2 : Exp r) (f : Exp2 q r s) : 
+    β (Let_Pair (Pair e1 e2) f) (Subst2 f e1 e2)
 
-Inductive Extend {A} (a : A) (X : Type) : Type :=
-| hd : Extend a X
-| tl : X -> Extend a X.
-Arguments hd {A} {a} {X}.
-Arguments tl {A} {a} {X}.
+| β_lower {τ} `{IsHSet τ} {q} (x : τ) (f : τ -> Exp q) :
+    β (Let_Bang (Put x) f) (f x)
 
-Definition extend {X A : Type} (Γ : Ctx X A) (a : A) : Ctx (Extend a X) A :=
-  fmap_Ctx tl Γ.
-
-
-Definition extend_fmap {A : Type} (a : A) {X Y : Type} (f : X -> Y) 
-                       (x : Extend a X) : Extend a Y :=
-  match x with
-  | hd => hd
-  | tl x => tl (f x)
-  end.
-
-Instance extend_functor {A} (a : A) : Monad.Functor (Extend a) := 
-         {fmap := @extend_fmap _ a}.
-
-Inductive Exp X : QType -> Type :=
-| Var : forall {Q}, X -> Exp X Q
-| App : forall {Q R}, Exp X (Q ⊸ R) -> Exp X Q -> Exp X R
-| Abs : forall {Q R}, Exp (Extend Q X) R -> Exp X (Q ⊸ R) 
-| Pair : forall {Q R}, Exp X Q -> Exp X R -> Exp X (Q ⊗ R)
-| LetPair : forall {Q1 Q2 R}, 
-            Exp X (Q1 ⊗ Q2) -> Exp (Extend Q1 (Extend Q2 X)) R -> Exp X R
-| Put : forall {τ} `{DecidablePaths τ}, τ -> Exp X (Lower τ)
-| LetBang : forall {τ Q} `{DecidablePaths τ}, 
-  Exp X (Lower τ) -> (τ -> Exp X Q) -> Exp X Q
-| new  : Bool -> Exp X Qubit
-| meas : Exp X Qubit -> Exp X (Lower Bool)
+| β_qubit (b : Bool) :
+    β (Meas (New b)) (Put b)
 .
 
-Arguments Var {X} {Q} x.
-Arguments App {X} {Q R}.
-Arguments Abs {X} {Q R}.
-Arguments Pair {X} {Q R}.
-Arguments LetPair {X} {Q1 Q2 R}.
-Arguments Put {X} {τ} {decτ} (x) : rename.
-Arguments LetBang {X τ Q} {decτ} : rename.
-Arguments new {X}.
-Arguments meas {X}.
+Instance β_relation : forall q, is_mere_relation (Exp q) β.
+Admitted. (* should be true because β is type directed *)
 
-(* These axioms should be incorporated into the equational theory *)
-Axiom new_meas : forall X b, meas (@new X b) = Put (negb b).
+About quotient.
+About class_of.
+About related_classes_eq.
+Definition βExp q := quotient (@β q).
 
+About class_of.
+Notation "[ e ]" := (class_of β e).
+Notation "e1 ≡ e2" := ([e1] = [e2]) (at level 50).
 
-Definition exp_fmap {X Y : Type} (f : X -> Y) {Q} (e : Exp X Q) : Exp Y Q.
+Lemma equiv_trans : forall {q} (e1 e2 e3 : Exp q),
+      e1 ≡ e2 -> e2 ≡ e3 -> e1 ≡ e3.
 Proof.
-  generalize dependent Y.
-  induction e; intros Y f.
-  - exact (Var (f x)).
-  - exact (App (IHe1 Y f) (IHe2 Y f)).
-  - exact (Abs (IHe (Extend Q Y) (fmap f))).
-  - exact (Pair (IHe1 _ f) (IHe2 _ f)).
-  - exact (LetPair (IHe1 _ f) (IHe2 _ (fmap (fmap f)))).
-  - exact (Put τ0).
-  - exact (LetBang (IHe _ f) (fun x => X0 x _ f)).
-  - exact (new b).
-  - exact (meas (IHe _ f)).
-Defined.
+  intros.
+  transitivity ([e2]); auto.
+Qed.
 
-Definition shift {X} {Q R : QType} (e : Exp X R) : Exp (Extend Q X) R := 
-    exp_fmap tl e.
-
-Definition exp_option_lift {X Y : Type} {Q R} (f : X -> Exp Y R) (x : Extend Q X) 
-                           : Exp (Extend Q Y) R :=
-  match x with
-  | hd => Var hd
-  | tl x' => shift (f x') 
-  end.
-
-
-Definition exp_bind {X Q} (e : Exp X Q) : forall {Y} 
-                    (f : forall S, X -> option (Exp Y S)),
-                    option (Exp Y Q).
+Lemma β_lolli' : forall q r (f : q --o r) (e : Exp q),
+      App (Abs f) e ≡ Subst f e.
 Proof.
-  induction e; intros Y f.
-  - exact (f _ x).
-  - exact (do e1 ← IHe1 _ f;
-           do e2 ← IHe2 _ f;
-           return_ (App e1 e2)).
-  - apply (fmap Abs).
-    exact (IHe _ (fun S ext => match ext with
-                               | hd => Some (Var hd)
-                               | tl z => fmap shift (f _ z)
-                               end)).
-  - exact (do e1 ← IHe1 _ f;
-           do e2 ← IHe2 _ f;
-           return_ (Pair e1 e2)).
-  - refine (do e1 ← IHe1 _ f;
-            do e2 ← IHe2 _ _;
-            return_ (LetPair e1 e2)).
-    refine (fun S ext => match ext with
-                         | hd => (* 0:Q1 ↦ Var 0 *) Some (Var hd)
-                         | tl hd => Some (Var (tl hd)) (* 1:Q2 ↦ Var 1 *)
-                         | tl (tl z) => fmap shift (fmap shift (f _ z))
-                         end).
-  - refine (Some (Put τ0)).
-  - refine (do e1 ← IHe _ f; _).
-    admit (*??? *).
-  - refine (Some (new b)).
-  - exact (do e' ← IHe _ f; return_ (meas e')).
-Admitted.
+  intros q r f e.
+  apply related_classes_eq.
+  apply β_lolli.
+Qed.
 
-Definition subst_var {X} {R} (e : Exp X R) (x : Extend R X) : Exp X R :=
-  match x with
-  | hd => e
-  | tl y => Var y
-  end.
+(* Note: We do not expect progress to hold! *)
 
-Definition subst {X} {Q R} (e : Exp X R) (e' : Exp (Extend R X) Q) 
-            : option (Exp X Q).
-Proof.
-  apply (exp_bind e').
-  intros S x.
-  destruct (dec_paths S R) as [H | H].
-  - (* S = R *) rewrite H; clear S H.
-    exact (Some (subst_var e x)).
-  - (* S <> R *) exact None.
-Defined.
 
-Inductive exp_step : forall X Q, Exp X Q -> Exp X Q -> Type :=
-| β_App : forall X Q R (e1 : Exp (Extend Q X) R) (e2 : Exp X Q) (e' : Exp X R),
-          subst e2 e1 = Some e' ->
-          exp_step (App (Abs e1) e2) e'
-| η_App : forall X Q R (e : Exp X (Q ⊸ R)),
-          exp_step e (Abs (App (shift e) (Var hd)))
-.
-
-Definition trunc_exp_step X Q : Exp X Q -> Exp X Q -> Type :=
-  fun e1 e2 => Trunc -1 (exp_step e1 e2).
-Definition ExpEq X Q := quotient (@trunc_exp_step X Q).
-
-Notation "(| e |)" := (class_of (@trunc_exp_step _ _) e) (at level 40).
-
+(*************)
 (* unitaries *)
+(*************)
 
-Definition unitary {X} {Q1 Q2} (U : Q1 = Q2) (e : Exp X Q1) : Exp X Q2 :=
-  transport _ U e.
-
-Definition Unitary (Q : QType) := Q = Q.
+Definition unitary {q r} (U : q = r) (e : Exp q) : Exp r := transport _ U e.
+Definition Unitary (q : QType) := q = q.
 
 
-Lemma U_compose : forall (Q1 Q2 Q3 : QType) (U1 : Q1 = Q2) (U2 : Q2 = Q3)
-                  {X} (e : Exp X Q1),
+Lemma U_compose : forall q1 q2 q3 (U1 : q1 = q2) (U2 : q2 = q3) (e : Exp q1),
       unitary U2 (unitary U1 e) = unitary (U1 @ U2) e.
 Proof.
-  destruct U1. intros. simpl. rewrite concat_1p. reflexivity.
-Defined.
+  destruct U1. intros.
+  simpl.
+  rewrite concat_1p.
+  reflexivity.
+Qed.
 
-Lemma U_U_transpose : forall (Q : QType) (U : Unitary Q) {X} (e : Exp X Q),
+
+Lemma U_U_transpose : forall {q : QType} (U : Unitary q) (e : Exp q),
       unitary (U^) (unitary U e) = e.
 Proof. 
   intros. rewrite U_compose. rewrite concat_pV. reflexivity.
 Defined.
 
-Lemma H_H_inverse : forall {X} (e : Exp X Qubit), unitary H (unitary H e) = e.
+Require Import Groupoid.
+
+Axiom H' : UnitaryMatrix Qubit' Qubit'.
+Axiom H'_dag : (H'^ = H')%groupoid.
+Definition H : Unitary Qubit := cell _ H'.
+Lemma H_dag : H^ = H.
+Proof.
+  unfold H.
+  Local Open Scope groupoid_scope.
+  rewrite (quotient1_inv _ _ U_groupoid _ _ H').
+  rewrite H'_dag.
+  reflexivity.
+Qed.
+
+Lemma H_H_inverse : forall (e : Exp Qubit), unitary H (unitary H e) = e.
 Proof.
   intros.
   refine (_ @ U_U_transpose H e).
-  set (P := fun U => unitary U (unitary H e) = unitary H^ (unitary H e)).
-  apply (transport P H_dag idpath).
-Defined.
+  rewrite H_dag.
+  reflexivity.
+Qed.
 
-Definition U_lolli Q1 Q1' Q2 Q2' (U1 : Q1 = Q1') (U2 : Q2 = Q2') : (Q1 ⊸ Q2) = (Q1' ⊸ Q2').
+Definition U_lolli {Q1 Q1' Q2 Q2'} (U1 : Q1 = Q1') (U2 : Q2 = Q2') : (Q1 ⊸ Q2) = (Q1' ⊸ Q2').
 Proof.
   destruct U1.
   destruct U2.
@@ -263,56 +203,85 @@ Proof.
 Defined.
 
 
-Lemma U_lolli_unitary' : forall X Q1 Q1' Q2 Q2' (U1 : Q1 = Q1') (U2 : Q2 = Q2') 
-                        (e : Exp X (Q1 ⊸ Q2)),
-      (| unitary (U_lolli U1 U2) e |)
-    = (| Abs (unitary U2 (App (shift e) (unitary U1^ (Var hd)))) |).
-Proof.
-  destruct U1; destruct U2; intros.
-  simpl. 
-  apply related_classes_eq.
-  apply tr.
-  apply η_App.
-Defined.
+Definition apply_U_lolli {q1 q1' q2 q2'} (U1 : q1 = q1') (U2 : q2 = q2') 
+                    (f : q1 --o q2) : q1' --o q2' := fun _ x => 
+  transport _ U2 (f _ (transport _ U1^ x)).
 
-Definition abs {X} Q1 Q2 (f : Extend Q1 X -> Exp (Extend Q1 X) Q2) : Exp X (Q1 ⊸ Q2) :=
-  Abs (f hd).
-Notation "λ x ~> e" := (abs (fun x => e)) (left associativity, at level 40).
+Lemma U_lolli_unitary : forall q1 q1' q2 q2' (U1 : q1 = q1') (U2 : q2 = q2')
+                               (f : q1 --o q2),
+      unitary (U_lolli U1 U2) (Abs f)
+    = Abs (apply_U_lolli U1 U2 f).
+Proof.
+  destruct U1, U2; intros.
+  unfold apply_U_lolli.
+  reflexivity.
+Qed.
+
 Notation "U1 -u⊸ U2" := (U_lolli U1 U2) (at level 30).
-Notation "e1 `app` e2" := (App e1 e2) (at level 30).
   
-Corollary U_lolli_unitary : forall X Q1 Q2 
-                                   (U1 : Unitary Q1) (U2 : Unitary Q2)
-                                   (e : Exp X (Q1 ⊸ Q2)),
-          (| unitary (U1 -u⊸ U2) e |)
-        = (| abs(fun x => unitary U2 (shift e `app` unitary U1^ (Var x))) |).
-Proof.
-  intros.
-  apply U_lolli_unitary'.
-Defined.
 
-Lemma unitary_id : forall X Q (e : Exp X Q), e = unitary idpath e.
+Lemma unitary_id : forall Q (e : Exp Q), e = unitary 1 e.
 Proof. reflexivity. Defined.
 
-(* CANNOT prove this *)
-Lemma U_not_id : forall Q (U : Q = Q) X (e : Exp X Q),
+(* CANNOT prove this (which is good) *)
+Lemma U_not_id : forall Q (U : Q = Q) (e : Exp Q),
                  unitary U e = e ->
                  U = 1%path.
 Abort.
 
+Section meas_all.
 
-Instance toClassical_Deciable Q : DecidablePaths (toClassical Q).
-Admitted.
+  Variable Var : QType -> Type.
+  Context `{Univalence}. (* need this for to_classical *)
 
-Definition meas_any {Q : QType} {X} (e : Exp X Q) : Exp X (Lower (toClassical Q)).
+  Definition to_classical_QType q := Lower (to_classical q).
+  
+  Lemma to_classical_lolli : forall q r, to_classical (q ⊸ r) = BuildhSet Unit.
+  Admitted.
+
+  Lemma to_classical_tensor : forall q r, 
+        to_classical (q ⊗ r) = BuildhSet (to_classical q * to_classical r).
+  Admitted.
+
+  Fixpoint meas_all {q} (e : exp to_classical q) : exp Var (Lower (to_classical q)).
+  Proof.
+    destruct e as [ q x | q r f | q r e1 e2 (* abstraction *)
+                  | q r e1 e2 | q r s e e' (* pairs *)
+                  | τ H x | τ H q e e' (* let! *)
+                  | | e (* new *) ].
+    * exact (put x).
+    * rewrite to_classical_lolli. 
+      exact (put tt).
+    * admit (* not sure what to do here *) (*!!!!!*).
+    * rewrite to_classical_tensor. simpl.
+      exact (let_bang (meas_all _ e1) (fun x1 =>
+              let_bang (meas_all _ e2) (fun x2 =>
+              put (x1, x2)))).
+    * set (e0 := meas_all _ e). 
+      rewrite to_classical_tensor in e0. simpl in e0.
+      exact (let_bang e0 (fun z => let (x,y) := z in
+                                   meas_all _ (e' x y))).
+    * exact (put x).
+    * exact (let_bang (meas_all _ e) (fun x => meas_all _ (e' x))).
+    * exact (put b).
+    * set (e' := meas_all _ e). simpl in e'.
+      simpl in *. 
+      (*exact e'.*)
+      admit (* the only problem is a difference in the argumenent that Bool is
+               1-truncated.. *).
+  Admitted.
+
+End meas_all.
+
+Definition Meas_All `{Univalence} {q} (e : Exp q) : Exp (Lower (to_classical q)) :=
+  fun Var => meas_all Var (e _).
+  
+
+Lemma unitary_discard `{Univalence} : 
+      forall q1 q2 (U : q1 = q2) q (e1 : Exp q1) (e : Exp q),
+      Let_Bang (Meas_All (unitary U e1)) (fun _ => e) 
+    = Let_Bang (Meas_All e1) (fun _ => e).
 Proof.
-  generalize dependent X.
-Admitted.
-
-(* This was an axiom, but we can prove it instead! *)
-Lemma unitary_discard : forall Q1 Q2 (U : Q1 = Q2) 
-                        X Q (e : Exp X Q1) (e' : Exp X Q),
-   LetBang (meas_any (unitary U e)) (fun _ => e') = LetBang (meas_any e) (fun _ => e').
-Proof.
-  induction U; reflexivity.
-Defined.
+  destruct U; intros.
+  reflexivity.
+Qed.
