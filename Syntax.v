@@ -119,6 +119,8 @@ Inductive β : forall {q}, Exp q -> Exp q -> Type :=
     β (Meas (New b)) (Put b)
 .
 
+
+
 Instance β_relation : forall q, is_mere_relation (Exp q) β.
 Admitted. (* should be true because β is type directed *)
 
@@ -156,6 +158,20 @@ Qed.
 Definition unitary {q r} (U : q = r) (e : Exp q) : Exp r := transport _ U e.
 Definition Unitary (q : QType) := q = q.
 
+(* Defining unitary transformations on classical states *)
+Axiom new_matrix : Bool -> Matrix (Lower' Unit) Qubit'.
+Axiom X : Matrix Qubit' Qubit'.
+Require Import Groupoid.
+Open Scope groupoid_scope.
+
+
+Axiom X_new : forall b, X o new_matrix b = new_matrix (negb b).
+Inductive equiv : forall {q}, Exp q -> Exp q -> Type :=
+| U_new : forall (U : Matrix Qubit' Qubit') b b', 
+          U o new_matrix b = new_matrix b' ->
+          equiv (unitary (cell _ U) (New b)) (New b')
+.
+
 
 Lemma U_compose : forall q1 q2 q3 (U1 : q1 = q2) (U2 : q2 = q3) (e : Exp q1),
       unitary U2 (unitary U1 e) = unitary (U1 @ U2) e.
@@ -165,7 +181,6 @@ Proof.
   rewrite concat_1p.
   reflexivity.
 Qed.
-
 
 Lemma U_U_transpose : forall {q : QType} (U : Unitary q) (e : Exp q),
       unitary (U^) (unitary U e) = e.
@@ -194,6 +209,21 @@ Proof.
   rewrite H_dag.
   reflexivity.
 Qed.
+
+Definition U_tensor {q1 q1' q2 q2'} (U1 : q1 = q1') (U2 : q2 = q2') :
+           q1 ⊗ q2 = q1' ⊗ q2'.
+Proof.
+  destruct U1, U2.
+  reflexivity.
+Defined.
+
+Lemma U_tensor_pair : forall {q1 q1' q2 q2'} (U1 : q1 = q1') (U2 : q2 = q2')
+                                             (e1 : Exp q1) (e2 : Exp q2),
+      unitary (U_tensor U1 U2) (Pair e1 e2) = Pair (unitary U1 e1) (unitary U2 e2).
+Proof.
+  destruct U1, U2; intros; auto.
+Qed.
+
 
 Definition U_lolli {Q1 Q1' Q2 Q2'} (U1 : Q1 = Q1') (U2 : Q2 = Q2') : (Q1 ⊸ Q2) = (Q1' ⊸ Q2').
 Proof.

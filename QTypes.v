@@ -18,31 +18,30 @@ Section QType.
   (* These are axioms because I don't want to deal with actual vector spaces and
   unitary transformations quite yet. They should not be axiomatic in the end. *)
 
-  Axiom UnitaryMatrix : QType' -> QType' -> Type.
-  Axiom U_HSet : forall Q1 Q2, IsHSet (UnitaryMatrix Q1 Q2).
-  Axiom U_refl : Reflexive UnitaryMatrix.
-  Axiom U_trans : Transitive UnitaryMatrix.
-  Axiom U_symm : Symmetric UnitaryMatrix.
-  Axiom U_groupoid : groupoid _ UnitaryMatrix.
+  Axiom Matrix : QType' -> QType' -> Type.
+  Axiom U_HSet : forall Q1 Q2, IsHSet (Matrix Q1 Q2).
+  Axiom U_refl : Reflexive Matrix.
+  Axiom U_trans : Transitive Matrix.
+  Axiom U_symm : Symmetric Matrix.
+  Axiom U_groupoid : groupoid _ Matrix.
 
     Local Open Scope groupoid_scope.
 
-
     Axiom U_tensor : forall {x x' y y'} 
-                        (U : UnitaryMatrix x x') (U' : UnitaryMatrix y y'),
-                        UnitaryMatrix (Tensor' x y) (Tensor' x' y').
+                        (U : Matrix x x') (U' : Matrix y y'),
+                        Matrix (Tensor' x y) (Tensor' x' y').
     Axiom U_tensor_compose : forall {x1 x2 x3 y1 y2 y3} 
-                           (U1 : UnitaryMatrix x1 x2) (U2 : UnitaryMatrix x2 x3)
-                           (V1 : UnitaryMatrix y1 y2) (V2 : UnitaryMatrix y2 y3),
+                           (U1 : Matrix x1 x2) (U2 : Matrix x2 x3)
+                           (V1 : Matrix y1 y2) (V2 : Matrix y2 y3),
         U_tensor (U2 o U1) (V2 o V1)
       = U_tensor U2 V2 o U_tensor U1 V1.
 
     Axiom U_lolli : forall {x x' y y'} 
-                        (U : UnitaryMatrix x x') (U' : UnitaryMatrix y y'),
-                        UnitaryMatrix (Lolli' x y) (Lolli' x' y').
+                        (U : Matrix x x') (U' : Matrix y y'),
+                        Matrix (Lolli' x y) (Lolli' x' y').
     Axiom U_lolli_compose : forall {x1 x2 x3 y1 y2 y3} 
-                           (U1 : UnitaryMatrix x1 x2) (U2 : UnitaryMatrix x2 x3)
-                           (V1 : UnitaryMatrix y1 y2) (V2 : UnitaryMatrix y2 y3),
+                           (U1 : Matrix x1 x2) (U2 : Matrix x2 x3)
+                           (V1 : Matrix y1 y2) (V2 : Matrix y2 y3),
         U_lolli (U2 o U1) (V2 o V1)
       = U_lolli U2 V2 o U_lolli U1 V1.
 
@@ -63,13 +62,13 @@ Section QType.
     Definition Lower τ `{IsHSet τ} : QType := point U_groupoid (Lower' τ).
 
 
-Lemma QUnitary_eq : forall {Q1 Q2} (U1 U2 : UnitaryMatrix Q1 Q2),
+Lemma QUnitary_eq : forall {Q1 Q2} (U1 U2 : Matrix Q1 Q2),
                   U1 = U2 -> cell U_groupoid U1 = cell U_groupoid U2.
 Proof.
   intros Q1 Q2 U1 U2 eq.
    rewrite eq. reflexivity.
 Qed. (* Do we need to go the other way? Does that even make sense? *)
-     (* No, we would need [U : QTy Q1 = QTy Q2] = ||UnitaryMatrix Q1 Q2|| *)
+     (* No, we would need [U : QTy Q1 = QTy Q2] = ||Matrix Q1 Q2|| *)
 
 Print QType'. Print TruncType. 
 Fixpoint to_classical' (q : QType') : Type :=
@@ -108,10 +107,10 @@ Definition to_classical_1type (q : QType') : TruncType 0 :=
   {| trunctype_type := to_classical' q |}.
     
 (* Can't prove this from the axioms we have, but is reasonable *)
-Axiom to_classical_cell : forall {q r} (U : UnitaryMatrix q r), 
+Axiom to_classical_cell : forall {q r} (U : Matrix q r), 
     to_classical_1type q = to_classical_1type r.
 Axiom to_classical_linear : 
-      forall {q r s} (U : UnitaryMatrix q r) (V : UnitaryMatrix r s),
+      forall {q r s} (U : Matrix q r) (V : Matrix r s),
       to_classical_cell (V o U) = to_classical_cell U @ to_classical_cell V.
 
 (* need univalence to show that HSet is a 0-type? *)
@@ -128,7 +127,7 @@ Definition toUnitary : QType -> QType'.
 Proof.
   apply quotient1_rec_set with (C_point := fun Q => Q); [ | apply QType'_HSet].
   (* this is only true up to asssociativity/commutativity *)
-  (* or maybe UnitaryMatrix can be more restrictive *)
+  (* or maybe Matrix can be more restrictive *)
 Abort.
 
 End QType.
