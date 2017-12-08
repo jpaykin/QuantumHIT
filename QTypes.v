@@ -53,11 +53,24 @@ Section QType.
       apply quotient1_map2 with (f := Tensor') (map_cell := @U_tensor).
       apply @U_tensor_compose.
     Defined.
+    Lemma Tensor_point : forall q r, 
+          Tensor (point U_groupoid q) (point U_groupoid r) = point U_groupoid (Tensor' q r).
+    Proof.
+      intros q r.
+      reflexivity.
+    Qed. 
+
     Definition Lolli : QType -> QType -> QType.
     Proof.
       apply quotient1_map2 with (f := Lolli') (map_cell := @U_lolli).
       apply @U_lolli_compose.
     Defined.
+    Lemma Lolli_point : forall q r,
+          Lolli (point U_groupoid q) (point U_groupoid r) = point U_groupoid (Lolli' q r).
+    Proof.
+      intros q r.
+      reflexivity.
+    Qed.
     Definition Qubit : QType := point U_groupoid Qubit'.
     Definition Lower τ `{IsHSet τ} : QType := point U_groupoid (Lower' τ).
 
@@ -70,58 +83,99 @@ Proof.
 Qed. (* Do we need to go the other way? Does that even make sense? *)
      (* No, we would need [U : QTy Q1 = QTy Q2] = ||Matrix Q1 Q2|| *)
 
-Print QType'. Print TruncType. 
-Fixpoint to_classical' (q : QType') : Type :=
+Fixpoint to_classical' (q : QType') : QType' :=
   match q with
-  | Qubit'        => Bool
-  | Tensor' q1 q2 => to_classical' q1 * to_classical' q2
-  | Lolli'  q1 q2 => Unit
-  | Lower' τ _    => τ
+  | Qubit'        => Lower' Bool
+  | Tensor' q1 q2 => Tensor' (to_classical' q1) (to_classical' q2)
+  | Lolli'  q1 q2 => Lolli' (to_classical' q1) (to_classical' q2)
+  | Lower' τ _    => Lower' τ
   end.
 
-Print hset_bool.
-Search (PathCollapsible Bool).
-About hset_pathcoll.
-Print hset_pathcoll.
-Print collapse.
-
-Global Instance decidable_paths_unit : DecidablePaths Unit.
+(* Note: to_classical' q should always correspond to a 1-dimensional vector
+space, so the resuling matrix will always just be the identity matrix. *)
+Axiom to_classical_map_cell : forall q r, 
+      Matrix q r -> Matrix (to_classical' q) (to_classical' r).
+Axiom to_classical_map_compose : 
+      forall (x y z : QType') (f : Matrix x y) (g : Matrix y z),
+  to_classical_map_cell x z (g o f) =
+  to_classical_map_cell y z g o to_classical_map_cell x y f.
+Definition to_classical : QType -> QType.
 Proof.
-  intros [] []. left. auto.
-Qed.
+  apply quotient1_map with (f := to_classical') 
+                           (map_cell := to_classical_map_cell).
+  apply to_classical_map_compose.
+Defined.
 
-Corollary hset_unit : IsHSet Unit.
-Proof.
-  exact _.
-Qed.
+Section to_classical_tensor.
 
-Instance to_classical_is_trunc : forall q, IsHSet (to_classical' q).
+  Let P0 := fun q r => 
+             to_classical (Tensor q r) = Tensor (to_classical q) (to_classical r).
+  Let P0_HSet : forall q r, IsHSet (P0 q r).
+  Proof.
+    intros q r.
+    unfold P0.
+    exact _.
+  Defined.
+  Let P0_point : forall q r, P0 (point _ q) (point _ r).
+  Proof.
+    intros q r.
+    reflexivity. 
+  Defined.
+
+(*    
+  Let P0_cell_l : forall q q' r (U : Matrix q q'),
+                   transport P0 (cell U_groupoid U) (P0_point q r) = P0_point q' r.
+  Let (P0_cell_r : forall q r r' (A : Matrix r r'),
+                   cell f # P0_point q r = P0_point q r'.
+*)
+  Lemma to_classical_tensor : forall q r,
+        to_classical (Tensor q r) = Tensor (to_classical q) (to_classical r).
+  Proof.
+
+    apply quotient1_ind2_set with (P_point := P0_point); auto.
+    * intros. admit.
+    * intros. unfold P0_point. admit.
+  Admitted.
+
+End to_classical_tensor.
+ 
+  Lemma to_classical_lolli : forall q r,
+        to_classical (Lolli q r) = Lolli (to_classical q) (to_classical r).
+  Admitted.
+  
+
+(*
+Instance to_classical_is_trunc `{Funext} : forall q, IsHSet (to_classical' q).
 Proof.
   induction q; intros; auto.
   * simpl. apply hset_bool.
   * simpl. exact _. 
-  * simpl. exact _.
-Qed.
+  * simpl. apply trunc_arrow. (* need Funext for this *)
+Defined.
 
-Definition to_classical_1type (q : QType') : TruncType 0 :=
+Definition to_classical_1type `{Funext} (q : QType') : TruncType 0 :=
   {| trunctype_type := to_classical' q |}.
     
 (* Can't prove this from the axioms we have, but is reasonable *)
-Axiom to_classical_cell : forall {q r} (U : Matrix q r), 
+Axiom to_classical_cell : forall `{Funext} {q r} (U : Matrix q r), 
     to_classical_1type q = to_classical_1type r.
 Axiom to_classical_linear : 
-      forall {q r s} (U : Matrix q r) (V : Matrix r s),
+      forall `{Funext} {q r s} (U : Matrix q r) (V : Matrix r s),
       to_classical_cell (V o U) = to_classical_cell U @ to_classical_cell V.
 
-(* need univalence to show that HSet is a 0-type? *)
-Definition to_classical `{Univalence} : QType -> TruncType 0.
+(* need univalence to show that HSet is a 0-type (aka an hSet) *)
+Definition to_classical_hSet `{Univalence} `{Funext} : QType -> hSet.
 Proof.
-  apply quotient1_rec with (C_point := to_classical_1type) 
-                           (C_cell := @to_classical_cell).
+  apply quotient1_rec with (C_point := @to_classical_1type _) 
+                           (C_cell := @to_classical_cell _).
   -- apply @to_classical_linear.
   -- exact _.
 Defined.
-  
+Definition to_classical `{Univalence} `{Funext} (q : QType) : Type :=
+  to_classical_hSet q.
+*)
+
+
 
 Definition toUnitary : QType -> QType'.
 Proof.
@@ -140,5 +194,3 @@ Lemma lolli_inv : forall q q' r r',
       q ⊸ r = q' ⊸ r' ->
       q = q' /\ r = r'.
 Admitted.
-
-

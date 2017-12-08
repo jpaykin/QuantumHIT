@@ -11,21 +11,15 @@ Section Exp.
   | var {q} : Var q -> exp q
   | abs {q r} : (Var q -> exp r) -> exp (q ⊸ r)
   | app {q r} : exp (q ⊸ r) -> exp q -> exp r
+
   | pair {q r} : exp q -> exp r -> exp (q ⊗ r)
   | let_pair {q r s} : exp (q ⊗ r) -> (Var q -> Var r -> exp s) -> exp s
+
   | put {τ} `{IsHSet τ} : τ -> exp (Lower τ)
   | let_bang {τ} `{IsHSet τ} {q} : exp (Lower τ) -> (τ -> exp q) -> exp q
+
   | new : Bool -> exp Qubit
   | meas : exp Qubit -> exp (Lower Bool)
-  .
-
-  Inductive is_value : forall {q}, exp q -> Type :=
-  | v_abs {q r} (f : Var q -> exp r) : is_value (abs f)
-  | v_pair {q r} (e1 : exp q) (e2 : exp r) : is_value e1 -> 
-                                             is_value e2 -> 
-                                             is_value (pair e1 e2)
-  | v_put {τ} `{IsHSet τ} (x : τ) : is_value (put x)
-  | v_new (b : Bool) : is_value (new b)
   .
 
 End Exp.
@@ -39,6 +33,11 @@ Arguments put {Var} {τ} {hset} : rename.
 Arguments let_bang {Var} {τ} {hset} {q} : rename.
 Arguments new {Var}.
 Arguments meas {Var}.
+
+
+
+
+
 
 
 (**************)
@@ -73,6 +72,13 @@ Definition Exp q := forall Var, exp Var q.
 Definition Exp1 q r := forall Var, Var q -> exp Var r.
 Definition Exp2 q r s := forall Var, Var q -> Var r -> exp Var s.
 Notation "q --o r" := (Exp1 q r) (at level 30).
+
+Inductive Lift : QType -> Type :=
+| Suspend {q} : Exp q -> Lift q.
+Definition Force {q} (e : Lift q) : Exp q.
+  destruct e.
+  exact e.
+Defined.
 
 Definition Subst {q r} (f : q --o r) (e : Exp q) : Exp r := fun Var =>
   squash (f (exp Var) (e Var)).
@@ -155,7 +161,7 @@ Qed.
 (* unitaries *)
 (*************)
 
-Definition unitary {q r} (U : q = r) (e : Exp q) : Exp r := transport _ U e.
+Definition unitary {q r : QType} (U : q = r) (e : Exp q) : Exp r := transport _ U e.
 Definition Unitary (q : QType) := q = q.
 
 (* Defining unitary transformations on classical states *)
@@ -190,7 +196,7 @@ Defined.
 
 Require Import Groupoid.
 
-Axiom H' : UnitaryMatrix Qubit' Qubit'.
+Axiom H' : Matrix Qubit' Qubit'.
 Axiom H'_dag : (H'^ = H')%groupoid.
 Definition H : Unitary Qubit := cell _ H'.
 Lemma H_dag : H^ = H.
@@ -261,57 +267,61 @@ Abort.
 
 Section meas_all.
 
-  Variable Var : QType -> Type.
-  Context `{Univalence}. (* need this for to_classical *)
+(*  Variable Var : QType -> Type.*)
+  Let cVar : QType -> Type := fun q => Lift (to_classical q).
 
-  Definition to_classical_QType q := Lower (to_classical q).
-  
-  Lemma to_classical_lolli : forall q r, to_classical (q ⊸ r) = BuildhSet Unit.
-  Admitted.
-
-  Lemma to_classical_tensor : forall q r, 
-        to_classical (q ⊗ r) = BuildhSet (to_classical q * to_classical r).
-  Admitted.
-
-  Fixpoint meas_all {q} (e : exp to_classical q) : exp Var (Lower (to_classical q)).
+  Fixpoint meas_all {q} {Var} (e : exp (fun r => Var (to_classical r)) q) : exp Var (to_classical q).
   Proof.
     destruct e as [ q x | q r f | q r e1 e2 (* abstraction *)
                   | q r e1 e2 | q r s e e' (* pairs *)
                   | τ H x | τ H q e e' (* let! *)
                   | | e (* new *) ].
+    * exact (var x).
+    * rewrite to_classical_lolli.
+      refine (abs (fun x => meas_all _ _ (f x))).
+    * set (e1' := meas_all _ _ e1).
+      set (e2' := meas_all _ _ e2).
+      rewrite to_classical_lolli in e1'.
+      exact (app e1' e2').
+    * rewrite to_classical_tensor.
+      exact (pair (meas_all _ _ e1) (meas_all _ _ e2)).
+    * set (e0 := meas_all _ _ e). 
+      rewrite to_classical_tensor in e0. 
+      exact (let_pair e0 (fun x y => meas_all _ _ (e' x y))).
     * exact (put x).
-    * rewrite to_classical_lolli. 
-      exact (put tt).
-    * admit (* not sure what to do here *) (*!!!!!*).
-    * rewrite to_classical_tensor. simpl.
-      exact (let_bang (meas_all _ e1) (fun x1 =>
-              let_bang (meas_all _ e2) (fun x2 =>
-              put (x1, x2)))).
-    * set (e0 := meas_all _ e). 
-      rewrite to_classical_tensor in e0. simpl in e0.
-      exact (let_bang e0 (fun z => let (x,y) := z in
-                                   meas_all _ (e' x y))).
-    * exact (put x).
-    * exact (let_bang (meas_all _ e) (fun x => meas_all _ (e' x))).
+    * exact (let_bang (meas_all _ _ e) (fun x => meas_all _ _ (e' x))).
     * exact (put b).
-    * set (e' := meas_all _ e). simpl in e'.
-      simpl in *. 
-      (*exact e'.*)
-      admit (* the only problem is a difference in the argumenent that Bool is
-               1-truncated.. *).
-  Admitted.
+    * exact (meas_all _ _ e).
+  Defined.
 
 End meas_all.
 
-Definition Meas_All `{Univalence} {q} (e : Exp q) : Exp (Lower (to_classical q)) :=
-  fun Var => meas_all Var (e _).
+Definition Meas_All {q} (e : Exp q) : Exp (to_classical q) :=
+  fun Var => meas_all (e _).
   
 
-Lemma unitary_discard `{Univalence} : 
-      forall q1 q2 (U : q1 = q2) q (e1 : Exp q1) (e : Exp q),
+Lemma unitary_discard' `{Univalence} : 
+      forall {q1 q2} (U : q1 = q2) {q} (e1 : Exp q1) (e : Exp q),
       Let_Bang (Meas_All (unitary U e1)) (fun _ => e) 
     = Let_Bang (Meas_All e1) (fun _ => e).
 Proof.
   destruct U; intros.
   reflexivity.
 Qed.
+
+Lemma Meas_All_Qubit `{Univalence} : forall (e : Exp Qubit),
+    Meas_All e = Meas e.
+Proof.
+  intros e. apply path_forall; intros var.
+  unfold Meas_All.
+
+Lemma unitary_discard `{Univalence} : 
+      forall (U : Unitary Qubit) {q} (e : Exp Qubit) (e' : Exp q),
+      Let_Bang (Meas (unitary U e)) (fun _ => e')
+    = Let_Bang (Meas e) (fun _ => e').
+Proof.
+  intros.
+  set (p := unitary_discard' U e e').
+  simpl in p.
+
+Lemma 
