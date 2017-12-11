@@ -14,7 +14,6 @@ Section QType.
   Instance QType'_HSet : IsHSet QType'.
   Admitted.
 
-
   (* These are axioms because I don't want to deal with actual vector spaces and
   unitary transformations quite yet. They should not be axiomatic in the end. *)
 
@@ -83,6 +82,9 @@ Proof.
 Qed. (* Do we need to go the other way? Does that even make sense? *)
      (* No, we would need [U : QTy Q1 = QTy Q2] = ||Matrix Q1 Q2|| *)
 
+
+
+(*
 Fixpoint to_classical' (q : QType') : QType' :=
   match q with
   | Qubit'        => Lower' Bool
@@ -143,37 +145,46 @@ End to_classical_tensor.
         to_classical (Lolli q r) = Lolli (to_classical q) (to_classical r).
   Admitted.
   
+*)
 
-(*
-Instance to_classical_is_trunc `{Funext} : forall q, IsHSet (to_classical' q).
+
+
+Fixpoint to_classical' (q : QType') : Type :=
+  match q with
+  | Qubit' => Bool
+  | Tensor' q1 q2 => (to_classical' q1) * (to_classical' q2)
+  | Lolli' q1 q2  => Unit
+  | Lower' τ _    => τ
+  end.
+
+
+Instance to_classical_is_trunc : forall q, IsHSet (to_classical' q).
 Proof.
   induction q; intros; auto.
   * simpl. apply hset_bool.
   * simpl. exact _. 
-  * simpl. apply trunc_arrow. (* need Funext for this *)
+  * simpl. exact _.
 Defined.
 
-Definition to_classical_1type `{Funext} (q : QType') : TruncType 0 :=
+Definition to_classical_1type (q : QType') : TruncType 0 :=
   {| trunctype_type := to_classical' q |}.
     
 (* Can't prove this from the axioms we have, but is reasonable *)
-Axiom to_classical_cell : forall `{Funext} {q r} (U : Matrix q r), 
+Axiom to_classical_cell : forall {q r} (U : Matrix q r), 
     to_classical_1type q = to_classical_1type r.
 Axiom to_classical_linear : 
-      forall `{Funext} {q r s} (U : Matrix q r) (V : Matrix r s),
+      forall {q r s} (U : Matrix q r) (V : Matrix r s),
       to_classical_cell (V o U) = to_classical_cell U @ to_classical_cell V.
 
 (* need univalence to show that HSet is a 0-type (aka an hSet) *)
-Definition to_classical_hSet `{Univalence} `{Funext} : QType -> hSet.
+Definition to_classical_hSet `{Univalence} : QType -> hSet.
 Proof.
-  apply quotient1_rec with (C_point := @to_classical_1type _) 
-                           (C_cell := @to_classical_cell _).
+  apply quotient1_rec with (C_cell := @to_classical_cell).
   -- apply @to_classical_linear.
   -- exact _.
 Defined.
-Definition to_classical `{Univalence} `{Funext} (q : QType) : Type :=
+Definition to_classical `{Univalence} (q : QType) : Type :=
   to_classical_hSet q.
-*)
 
 
 
@@ -194,3 +205,10 @@ Lemma lolli_inv : forall q q' r r',
       q ⊸ r = q' ⊸ r' ->
       q = q' /\ r = r'.
 Admitted.
+
+
+Lemma to_classical_lolli `{Univalence} q r : to_classical (q ⊸ r) = Unit.
+Admitted.
+Lemma to_classical_tensor `{Univalence} q r : to_classical (q ⊗ r) = (to_classical q) * (to_classical r).
+Admitted.
+  

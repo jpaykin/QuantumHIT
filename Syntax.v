@@ -22,6 +22,9 @@ Section Exp.
   | meas : exp Qubit -> exp (Lower Bool)
   .
 
+  Definition let_in {q r} (e : exp q) (f : Var q -> exp r) : exp r :=
+    app (abs f) e.
+
 End Exp.
 
 Arguments var {Var} {q}.
@@ -33,10 +36,6 @@ Arguments put {Var} {τ} {hset} : rename.
 Arguments let_bang {Var} {τ} {hset} {q} : rename.
 Arguments new {Var}.
 Arguments meas {Var}.
-
-
-
-
 
 
 
@@ -265,11 +264,153 @@ Lemma U_not_id : forall Q (U : Q = Q) (e : Exp Q),
                  U = 1%path.
 Abort.
 
+
+
+Inductive IsTrue : Bool -> Type :=
+| Istrue : IsTrue true.
+
+(* TODO: prove cell H <> 1 *)
+
+
+Lemma bool_set : forall (b : Bool) (p : b = b), p = 1.
+Proof.
+  intros. 
+  apply hset_bool.
+Qed.
+
+Lemma IsTrue_eq : forall b1 b2 (p : b1 = b2) (pf1 : IsTrue b1) (pf2 : IsTrue b2), 
+    transport _ p pf1 = pf2.
+Proof.
+  destruct pf1.
+  destruct pf2.
+  rewrite (bool_set _ p).
+  simpl.
+  reflexivity.
+Defined.
+  
+
+Lemma IsTrue_eq' : forall (pf : IsTrue true), pf = Istrue.
+Proof.
+  intros. 
+  refine (IsTrue_eq _ _ 1 pf Istrue).
+Defined.
+  
+
+Inductive IsQubit : QType -> Type :=
+| IsQ : IsQubit Qubit.
+Definition fromQubit {q} (pfQubit : IsQubit q) : Exp Qubit -> Exp q.
+Proof.
+  destruct pfQubit.
+  exact (fun e => e).
+Defined.
+Definition toQubit {q} (pfQubit : IsQubit q) : Exp q -> Exp Qubit.
+Proof.
+  destruct pfQubit.
+  exact (fun e => e).
+Defined.
+
+(* I don't think this lemma is actually true. To prove the corresponding
+property for booleans, we rely on the fact that Bool is an HSet, but this is not
+true of QType. *)
+Lemma IsQubit_eq : forall (pf : IsQubit Qubit), pf = IsQ.
+Abort. 
+(* If it were true, we could prove the lemmas below *)
+(*
+Lemma bad : forall q r (U : q = r) (pf_q : IsQubit q) (pf_r : IsQubit r) (e : Exp q),
+    unitary U e = fromQubit pf_r (toQubit pf_q e).
+Proof.
+  destruct U.
+  destruct pf_q.
+  intros. 
+  simpl.
+  transitivity (fromQubit IsQ e); [reflexivity | ].
+  apply (ap (fun pf => fromQubit pf e)).
+  refine (IsQubit_eq _)^.
+Defined.
+
+Lemma bad_pos : unitary H (New False) = New False.
+Proof.
+  exact (bad _ _ H IsQ IsQ _).
+Defined.
+Lemma bad_flip : Meas (unitary H (New False)) = Meas (New False).
+Proof.
+  apply ap. apply bad_pos.
+Defined
+*)
+
+
+Section measure_discard.
+
+  Variable Var : QType -> Type.
+
+  (* This should be defined mutually recursively with measure_discard *)
+(*  Variable prepare0 : forall (q : QType), Exp q. *)
+
+  Fixpoint meas_discard' {q} (e : exp (fun _ => Unit) q) : exp Var (Lower Unit).
+  Proof.
+    destruct e as [ q x | q r f | q r e1 e2 (* abstraction *)
+                  | q r e1 e2 | q r s e e' (* pairs *)
+                  | τ H x | τ H q e e' (* let! *)
+                  | | e (* new *) ].
+    * exact (put x).
+    * apply (meas_discard' _ (f tt)).
+    * exact (let_bang (meas_discard' _ e1) (fun _ => 
+             let_bang (meas_discard' _ e2) (fun _ =>
+             put tt))).
+    * exact (let_bang (meas_discard' _ e1) (fun _ => 
+             let_bang (meas_discard' _ e2) (fun _ =>
+             put tt))).
+    * exact (let_bang (meas_discard' _ e) (fun _ =>
+             meas_discard' _ (e' tt tt))).
+    * exact (put tt).
+    * admit (*exact (let_bang e (fun x => meas_discard' _ (e' x))).*).
+    * exact (put tt).
+    * exact (meas_discard' _ e).
+  Admitted.
+
+End measure_discard.
+
+Definition Meas_Discard {q} (e : Exp q) : Exp (Lower Unit) :=
+  fun _ => meas_discard' _ (e _).
+
+
+
+(*
 Section meas_all.
 
-(*  Variable Var : QType -> Type.*)
-  Let cVar : QType -> Type := fun q => Lift (to_classical q).
+  Variable Var : QType -> Type.
+  Context `{Univalence}.
 
+  Lemma Lower_to_classical_lolli : forall q r, Lower (to_classical (q ⊸ r)) = Lower Unit.
+  Admitted.
+      (* this is true-ish, it's annoying because of hidden `{IsHSet} argument *)
+
+
+  Fixpoint meas_all {q} (e : exp to_classical q) : exp Var (Lower (to_classical q)).
+  Proof.
+    destruct e as [ q x | q r f | q r e1 e2 (* abstraction *)
+                  | q r e1 e2 | q r s e e' (* pairs *)
+                  | τ H x | τ H q e e' (* let! *)
+                  | | e (* new *) ].
+    * exact (put x).
+    * rewrite Lower_to_classical_lolli.
+      exact (put tt).
+    * set (e1' := meas_all _ e1). rewrite Lower_to_classical_lolli in e1'.
+      set (e2' := meas_all _ e2).
+      rewrite to_classical_lolli in e1'.
+      exact (app e1' e2').
+    * rewrite to_classical_tensor.
+      exact (pair (meas_all _ _ e1) (meas_all _ _ e2)).
+    * set (e0 := meas_all _ _ e). 
+      rewrite to_classical_tensor in e0. 
+      exact (let_pair e0 (fun x y => meas_all _ _ (e' x y))).
+    * exact (put x).
+    * exact (let_bang (meas_all _ _ e) (fun x => meas_all _ _ (e' x))).
+    * exact (put b).
+    * exact (meas_all _ _ e).
+  Defined.
+
+(*
   Fixpoint meas_all {q} {Var} (e : exp (fun r => Var (to_classical r)) q) : exp Var (to_classical q).
   Proof.
     destruct e as [ q x | q r f | q r e1 e2 (* abstraction *)
@@ -293,6 +434,7 @@ Section meas_all.
     * exact (put b).
     * exact (meas_all _ _ e).
   Defined.
+*)
 
 End meas_all.
 
@@ -324,4 +466,4 @@ Proof.
   set (p := unitary_discard' U e e').
   simpl in p.
 
-Lemma 
+*)
