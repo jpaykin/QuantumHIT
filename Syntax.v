@@ -9,14 +9,15 @@ Section Exp.
 
   Inductive exp : QType -> Type :=
   | var {q} : Var q -> exp q
+
   | abs {q r} : (Var q -> exp r) -> exp (q ⊸ r)
-  | app {q r} : exp (q ⊸ r) -> exp q -> exp r
+  | app {q r} : exp (q ⊸ r) -> exp q -> exp r 
 
   | pair {q r} : exp q -> exp r -> exp (q ⊗ r)
-  | let_pair {q r s} : exp (q ⊗ r) -> (Var q -> Var r -> exp s) -> exp s
+  | let_pair {q r s} : exp (q ⊗ r) -> (Var q -> Var r -> exp s) -> exp s 
 
-  | put {τ} `{IsHSet τ} : τ -> exp (Lower τ)
-  | let_bang {τ} `{IsHSet τ} {q} : exp (Lower τ) -> (τ -> exp q) -> exp q
+  | put {τ} : τ -> exp (Lower τ)
+  | let_bang {τ} {q} : exp (Lower τ) -> (τ -> exp q) -> exp q
 
   | new : Bool -> exp Qubit
   | meas : exp Qubit -> exp (Lower Bool)
@@ -32,11 +33,10 @@ Arguments abs {Var} {q r}.
 Arguments app {Var} {q r}.
 Arguments pair {Var} {q r}.
 Arguments let_pair {Var} {q r s}.
-Arguments put {Var} {τ} {hset} : rename.
-Arguments let_bang {Var} {τ} {hset} {q} : rename.
+Arguments put {Var} {τ} : rename.
+Arguments let_bang {Var} {τ} {q} : rename.
 Arguments new {Var}.
 Arguments meas {Var}.
-
 
 
 (**************)
@@ -50,7 +50,7 @@ Section Squash.
   Proof.
     destruct e as [ q x | q r f | q r e1 e2 (* abstraction *)
                   | q r e1 e2 | q r s e e' (* pairs *)
-                  | τ H x | τ H q e e' (* let! *)
+                  | τ x | τ q e e' (* let! *)
                   | | e (* new *) ].
     * exact x.
     * exact (abs (fun x => squash _ (f (var x)))).
@@ -96,8 +96,8 @@ Definition Pair {q r} (e1 : Exp q) (e2 : Exp r) : Exp (q ⊗ r) := fun Var =>
 Definition Let_Pair {q r s} (e : Exp (q ⊗ r)) (f : Exp2 q r s) : Exp s := fun Var =>
     let_pair (e Var) (f Var).
 
-Definition Put {τ} `{IsHSet τ} (x : τ) : Exp (Lower τ) := fun _ => put x.
-Definition Let_Bang {τ} `{IsHSet τ} {q} 
+Definition Put {τ} (x : τ) : Exp (Lower τ) := fun _ => put x.
+Definition Let_Bang {τ} {q} 
            (e : Exp (Lower τ)) (f : τ -> Exp q) : Exp q := fun Var =>
     let_bang (e Var) (fun x => f x Var).
 
@@ -117,7 +117,7 @@ Inductive β : forall {q}, Exp q -> Exp q -> Type :=
 | β_tensor {q r s} (e1 : Exp q) (e2 : Exp r) (f : Exp2 q r s) : 
     β (Let_Pair (Pair e1 e2) f) (Subst2 f e1 e2)
 
-| β_lower {τ} `{IsHSet τ} {q} (x : τ) (f : τ -> Exp q) :
+| β_lower {τ} {q} (x : τ) (f : τ -> Exp q) :
     β (Let_Bang (Put x) f) (f x)
 
 | β_qubit (b : Bool) :
@@ -129,9 +129,6 @@ Inductive β : forall {q}, Exp q -> Exp q -> Type :=
 Instance β_relation : forall q, is_mere_relation (Exp q) β.
 Admitted. (* should be true because β is type directed *)
 
-About quotient.
-About class_of.
-About related_classes_eq.
 Definition βExp q := quotient (@β q).
 
 About class_of.
@@ -164,18 +161,33 @@ Definition unitary {q r : QType} (U : q = r) (e : Exp q) : Exp r := transport _ 
 Definition Unitary (q : QType) := q = q.
 
 (* Defining unitary transformations on classical states *)
-Axiom new_matrix : Bool -> Matrix (Lower' Unit) Qubit'.
-Axiom X : Matrix Qubit' Qubit'.
+Axiom new_matrix : Bool -> Matrix 1 2.
+Axiom X' : Matrix 2 2.
+Axiom XU : Unitary_Prop X'.
+Definition X : Qubit = Qubit.
+Proof.
+  apply cell.
+  exists X'.
+  exact XU.
+Defined.
+
 Require Import Groupoid.
 Open Scope groupoid_scope.
 
 
+(*
+(* Converting a quantum expression to a vector depends on the linear structure
+of the expression. *)
+
+
 Axiom X_new : forall b, X o new_matrix b = new_matrix (negb b).
+
 Inductive equiv : forall {q}, Exp q -> Exp q -> Type :=
 | U_new : forall (U : Matrix Qubit' Qubit') b b', 
           U o new_matrix b = new_matrix b' ->
           equiv (unitary (cell _ U) (New b)) (New b')
 .
+*)
 
 
 Lemma U_compose : forall q1 q2 q3 (U1 : q1 = q2) (U2 : q2 = q3) (e : Exp q1),
@@ -194,14 +206,15 @@ Proof.
 Defined.
 
 Require Import Groupoid.
+Local Open Scope groupoid_scope.
 
-Axiom H' : Matrix Qubit' Qubit'.
+
+Axiom H' : UMatrix Qubit' Qubit'.
 Axiom H'_dag : (H'^ = H')%groupoid.
 Definition H : Unitary Qubit := cell _ H'.
-Lemma H_dag : H^ = H.
+Lemma H_dag : H^%path = H.
 Proof.
   unfold H.
-  Local Open Scope groupoid_scope.
   rewrite (quotient1_inv _ _ U_groupoid _ _ H').
   rewrite H'_dag.
   reflexivity.
@@ -383,7 +396,7 @@ Section meas_all.
 
   Lemma Lower_to_classical_lolli : forall q r, Lower (to_classical (q ⊸ r)) = Lower Unit.
   Admitted.
-      (* this is true-ish, it's annoying because of hidden `{IsHSet} argument *)
+
 
 
   Fixpoint meas_all {q} (e : exp to_classical q) : exp Var (Lower (to_classical q)).
