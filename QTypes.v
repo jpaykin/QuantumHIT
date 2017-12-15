@@ -8,8 +8,8 @@ Section QType.
   Inductive QType' :=
   | Qubit'
   | Tensor' (Q1 Q2 : QType')
-  | Lolli' (Q1 Q2 : QType')
-  | Lower' : forall (τ : Type), QType'
+(*  | Lolli' (Q1 Q2 : QType') *)
+  | Lower' : forall (τ : Type) `{IsHSet τ}, QType'
   .
 
 Section QType_dec.
@@ -19,8 +19,8 @@ Section QType_dec.
     match q1, q2 with
     | Qubit', Qubit' => True
     | Tensor' q11 q12, Tensor' q21 q22 => (q11 = q21) * (q12 = q22)
-    | Lolli' q11 q12, Lolli' q21 q22 => (q11 = q21) * (q12 = q22)
-    | Lower' τ1, Lower' τ2 => τ1 = τ2
+(*  | Lolli' q11 q12, Lolli' q21 q22 => (q11 = q21) * (q12 = q22)*)
+    | Lower' τ1 _, Lower' τ2 _ => τ1 = τ2
     | _, _ => Empty
     end.
 
@@ -30,15 +30,15 @@ Section QType_dec.
     set (P := QType'_code Qubit').
     apply (transport P H tt).
   Qed.
-  Lemma Qubit_Lolli_inv : forall q1 q2, Qubit' <> Lolli' q1 q2.
+(*Lemma Qubit_Lolli_inv : forall q1 q2, Qubit' <> Lolli' q1 q2.
   Proof.
     intros q1 q2 H.
     set (P := QType'_code Qubit').
     apply (transport P H tt).
-  Qed.
-  Lemma Qubit_Lower_inv : forall τ, Qubit' <> Lower' τ.
+  Qed.*)
+  Lemma Qubit_Lower_inv : forall τ `{IsHSet τ}, Qubit' <> Lower' τ.
   Proof.
-    intros τ H.
+    intros τ pf H.
     set (P := QType'_code Qubit').
     apply (transport P H tt).
   Qed.
@@ -48,109 +48,43 @@ Section QType_dec.
     intros q1 q2 q1' q2' H.
     apply (transport (QType'_code (Tensor' q1 q2)) H (1,1)%path).
   Qed.
-  Lemma Tensor_Lolli_inv : forall q1 q2 q1' q2', Tensor' q1 q2 <> Lolli' q1' q2'.
+(*Lemma Tensor_Lolli_inv : forall q1 q2 q1' q2', Tensor' q1 q2 <> Lolli' q1' q2'.
   Proof.
     intros q1 q2 q1' q2' H.
     apply (transport (QType'_code (Tensor' q1 q2)) H (1,1)%path).
-  Qed.
-  Lemma Tensor_Lower_inv : forall q1 q2 τ, Tensor' q1 q2 <> Lower' τ.
+  Qed.*)
+  Lemma Tensor_Lower_inv : forall q1 q2 τ `{IsHSet τ}, Tensor' q1 q2 <> Lower' τ.
   Proof.
-    intros q1 q2 τ H.
+    intros q1 q2 τ pf H.
     apply (transport (QType'_code (Tensor' q1 q2)) H (1,1)%path).
   Qed.
-  Lemma Lolli_Lolli_inv : forall q1 q2 q1' q2', Lolli' q1 q2 = Lolli' q1' q2' ->
+(*Lemma Lolli_Lolli_inv : forall q1 q2 q1' q2', Lolli' q1 q2 = Lolli' q1' q2' ->
     (q1 = q1') * (q2 = q2').
   Proof.
     intros q1 q2 q1' q2' H.
     apply (transport (QType'_code (Lolli' q1 q2)) H (1,1)%path).
-  Qed.
-  Lemma Lolli_Lower_inv : forall q1 q2 τ, Lolli' q1 q2 <> Lower' τ.
+  Qed.*)
+(*Lemma Lolli_Lower_inv : forall q1 q2 τ, Lolli' q1 q2 <> Lower' τ.
   Proof.
     intros q1 q2 τ H.
     apply (transport (QType'_code (Lolli' q1 q2)) H (1,1)%path).
-  Qed.
-  Lemma Lower_Lower_inv : forall (τ1 τ2 : Type),
+  Qed.*)
+  Lemma Lower_Lower_inv : forall (τ1 τ2 : Type) `{IsHSet τ1} `{IsHSet τ2},
     Lower' τ1 = Lower' τ2 -> τ1 = τ2.
   Proof.
-    intros τ1 τ2 H.
+    intros τ1 τ2 pf1 pf2 H.
     apply (transport (QType'_code (Lower' τ1)) H 1%path).
   Qed.
     
-(*
-  Instance QType'_DecPaths  : DecidablePaths QType'.
-  Proof.
-    unfold DecidablePaths.
-    intros q1.
-    induction q1 as [ | q11 H11 q12 | q11 H11 q12 | τ1 H1];
-    intros q2; destruct q2 as [ | q21 q22 | q21 q22 | τ2 H2].
-    * left. exact 1%path.
-    * right. apply Qubit_Tensor_inv.
-    * right. apply Qubit_Lolli_inv.
-    * right. apply Qubit_Lower_inv.
-    * right. intros H; apply (Qubit_Tensor_inv _ _ H^).
-    * destruct (H11 q21) as [eq1 | neq1], (IHq12 q22) as [eq2 | neq2].
-      + left. transitivity (Tensor' q11 q22).
-        - apply ap. exact eq2.
-        - apply (ap (fun q => Tensor' q q22)). exact eq1.
-      + right. intros H.
-        apply Tensor_Tensor_inv in H.
-        destruct H.
-        contradiction.
-      + right. intros H.
-        apply Tensor_Tensor_inv in H.
-        destruct H.
-        contradiction.
-      + right. intros H.
-        apply Tensor_Tensor_inv in H.
-        destruct H.
-        contradiction.
-    * right. apply Tensor_Lolli_inv.
-    * right. apply Tensor_Lower_inv.
-    * right. intros H. apply (Qubit_Lolli_inv _ _ H^).
-    * right. intros H. apply (Tensor_Lolli_inv _ _ _ _ H^).
-    * destruct (H11 q21) as [eq1 | neq1], (IHq12 q22) as [eq2 | neq2].
-      + left. transitivity (Lolli' q11 q22).
-        - apply ap. exact eq2.
-        - apply (ap (fun q => Lolli' q q22)). exact eq1.
-      + right. intros H.
-        apply Lolli_Lolli_inv in H.
-        destruct H.
-        contradiction.
-      + right. intros H.
-        apply Lolli_Lolli_inv in H.
-        destruct H.
-        contradiction.
-      + right. intros H.
-        apply Lolli_Lolli_inv in H.
-        destruct H.
-        contradiction.
-    * admit.
-    * admit.
-    * admit.
-    * admit.
-    *
-*)
-      
 End QType_dec.
 
-(*
-  Global Instance QType'_HSet : IsHSet QType'.
-  Proof.
-    intros q1 q2. 
-    destruct q1; destruct q2.
-    * simpl. intros pf1 pf2. Search (IsTrunc _ (TruncType _))..
-    intros. admit.
-    
-  Admitted.
-*)
-
-  Fixpoint size_QType' (q : QType') : nat :=
-    match q with
-    | Qubit' => 2
-    | Tensor' Q1 Q2 => size_QType' Q1 * size_QType' Q2
-    | Lolli' Q1 Q2  => size_QType' Q1 * size_QType' Q2
-    | Lower' τ => 0
-    end.
+Fixpoint size_QType' (q : QType') : nat :=
+  match q with
+  | Qubit' => 2
+  | Tensor' Q1 Q2 => size_QType' Q1 * size_QType' Q2
+(*| Lolli' Q1 Q2  => size_QType' Q1 * size_QType' Q2*)
+  | Lower' τ _ => 0
+  end.
 
   (* These are axioms because I don't want to deal with actual vector spaces and
   unitary transformations quite yet. They should not be axiomatic in the end. *)
@@ -248,7 +182,7 @@ End QType_dec.
     reflexivity.
   Qed. 
 
-  Definition Lolli : QType -> QType -> QType.
+(*Definition Lolli : QType -> QType -> QType.
   Proof.
     apply quotient1_map2 with (f := Lolli') (map_cell := @U_tensor).
     apply @U_tensor_compose.
@@ -258,9 +192,9 @@ End QType_dec.
   Proof.
     intros q r.
     reflexivity.
-  Qed.
+  Qed.*)
   Definition Qubit : QType := point U_groupoid Qubit'.
-  Definition Lower τ : QType := point U_groupoid (Lower' τ).
+  Definition Lower τ `{IsHSet τ} : QType := point U_groupoid (Lower' τ).
 
 
   Lemma QUnitary_eq : forall {Q1 Q2} (U1 U2 : UMatrix Q1 Q2),
@@ -290,120 +224,60 @@ End QType_dec.
     * intros. apply hset_nat.
   Qed.
  
-  Lemma size_Lolli : forall q r,
+(*Lemma size_Lolli : forall q r,
         size_QType (Lolli q r) = size_QType q * size_QType r.
   Proof.
     apply quotient1_ind2_set with (P_point := fun _ _ => 1%path).
     * intros. exact _.
     * intros. apply hset_nat.
     * intros. apply hset_nat.
+  Qed.*)
+
+
+Close Scope nat_scope.
+
+Section Basis.
+  Context `{Univalence}.
+  Fixpoint Basis' (q : QType') : Type.
+  Proof.
+    destruct q.
+    * (* Qubit *) exact Bool. 
+    * (* Tensor *) exact ((Basis' q1) * (Basis' q2)). 
+    * (* Lower *) exact τ.
+  Defined.
+  Lemma Basis'_ishset : forall q, IsHSet (Basis' q).
+  Proof.
+    induction q; exact _.
   Qed.
 
-  
-
-
-(*
-Fixpoint to_classical' (q : QType') : QType' :=
-  match q with
-  | Qubit'        => Lower' Bool
-  | Tensor' q1 q2 => Tensor' (to_classical' q1) (to_classical' q2)
-  | Lolli'  q1 q2 => Lolli' (to_classical' q1) (to_classical' q2)
-  | Lower' τ _    => Lower' τ
-  end.
-
-(* Note: to_classical' q should always correspond to a 1-dimensional vector
-space, so the resuling matrix will always just be the identity matrix. *)
-Axiom to_classical_map_cell : forall q r, 
-      UMatrix q r -> UMatrix (to_classical' q) (to_classical' r).
-Axiom to_classical_map_compose : 
-      forall (x y z : QType') (f : UMatrix x y) (g : UMatrix y z),
-  to_classical_map_cell x z (g o f) =
-  to_classical_map_cell y z g o to_classical_map_cell x y f.
-Definition to_classical : QType -> QType.
-Proof.
-  apply quotient1_map with (f := to_classical') 
-                           (map_cell := to_classical_map_cell).
-  apply to_classical_map_compose.
-Defined.
-
-Section to_classical_tensor.
-
-  Let P0 := fun q r => 
-             to_classical (Tensor q r) = Tensor (to_classical q) (to_classical r).
-  Let P0_HSet : forall q r, IsHSet (P0 q r).
+  (* This might be better with a different defn of UMatrix based on Bases *)
+  Lemma Basis_cell : forall q r (U : UMatrix q r), Basis' q = Basis' r.
   Proof.
-    intros q r.
-    unfold P0.
-    exact _.
-  Defined.
-  Let P0_point : forall q r, P0 (point _ q) (point _ r).
-  Proof.
-    intros q r.
-    reflexivity. 
-  Defined.
-
-(*    
-  Let P0_cell_l : forall q q' r (U : UMatrix q q'),
-                   transport P0 (cell U_groupoid U) (P0_point q r) = P0_point q' r.
-  Let (P0_cell_r : forall q r r' (A : UMatrix r r'),
-                   cell f # P0_point q r = P0_point q r'.
-*)
-  Lemma to_classical_tensor : forall q r,
-        to_classical (Tensor q r) = Tensor (to_classical q) (to_classical r).
-  Proof.
-
-    apply quotient1_ind2_set with (P_point := P0_point); auto.
-    * intros. admit.
-    * intros. unfold P0_point. admit.
+    induction q; destruct r; intros U; simpl.
+    * reflexivity.
+    * (* Since |r1 ⊗ r2| = 2, either r1 or r2 has size 1, so either 
+         U : UMatrix Qubit r1 or U : UMatrix Qubit r2. In the first case,   
+         we get Bool = r1 ~ r1 * r2 by univalence, & vice versa *) admit.
+    * destruct U as [U pf_U].
+      assert (2 <> 0)%nat by admit. 
+      apply Empty_rec. apply X. 
+      apply (Unitary_Prop_size U pf_U).
+    * (* same as case 2 *) 
+      admit.
+    * (*???*) admit.
+    * (* since |q1 ⊗ q2| = 0, it must be the case that |q1|=0 or |q2|=0, 
+         *)
   Admitted.
 
-End to_classical_tensor.
- 
-  Lemma to_classical_lolli : forall q r,
-        to_classical (Lolli q r) = Lolli (to_classical q) (to_classical r).
-  Admitted.
-  
-*)
-
-
-  Close Scope nat_scope.
-
-  Inductive QData' : QType' -> Type :=
-  | QubitData' : QData' Qubit'
-  | TensorData' {q1 q2} : QData' q1 -> QData' q2 -> QData' (Tensor' q1 q2)
-  | LowerData' {τ} `{DecidablePaths τ} : QData' (Lower' τ)
-  .
-
-  Fixpoint Basis' {q} (pf : QData' q) : hSet.
+  Definition Basis : QType -> hSet.
   Proof.
-    destruct pf.
-    * (* Qubit *) exists Bool. exact _.
-    * (* Tensor *) exists ((Basis' q1 pf1) * (Basis' q2 pf2)). exact _.
-    * (* Lower *) exists τ. exact _.
-  Defined.
-  
-Print Finite.
-Search (fcard ?X = fcard ?Y).
+    eapply quotient1_rec with (C_point := Basis').
+    
+    admit. exact _.
 
 
-(*  Inductive QData : QType -> Type :=
-  | QubitData : QData Qubit
-  | TensorData {q1 q2} : QData q1 -> QData q2 -> QData (Tensor q1 q2)
-  | LowerData {τ} `{DecidablePaths τ} : QData (Lower τ)
-  .
-*)
-  Instance ishprop_QData' : forall q, IsHProp (QData' q).
-  Proof.
-    intros q.
-    apply hprop_allpath.
-  Admitted.
-
-  Definition QData'' : QType' -> hProp.
-  Proof.
-    intros q.
-    exists (Trunc -1 (QData' q)).
-    apply istrunc_truncation.
-  Defined.
+    
+End Basis.
  
   Definition QData `{Univalence} : QType -> hProp.
   Proof.
