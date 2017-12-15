@@ -387,6 +387,121 @@ Definition Meas_Discard {q} (e : Exp q) : Exp (Lower Unit) :=
   fun _ => meas_discard' _ (e _).
 
 
+Section meas_all.
+
+  Variable Var : QType -> Type.
+
+  Fixpoint meas_all {q} (pf : QData q) (e : exp Var q) : exp Var (Lower (Basis pf)).
+  Proof.
+    destruct pf.
+    * (* Qubit *) exact (meas e).
+    * (* Tensor *)
+      refine (let_pair e (fun x₁ x₂ => _)).
+      refine (let_bang (meas_all q1 pf1 (var x₁)) (fun y₁ => _)).
+      refine (let_bang (meas_all q2 pf2 (var x₂)) (fun y₂ => _)).
+      refine (put (y₁,y₂)).
+    * (* Lower *)
+      exact e.
+  Defined.
+
+End meas_all.
+Arguments meas_all {Var} {q} {pf} e.
+
+Definition Meas_All {q} (pf : QData q) : Exp q -> Exp (Lower (Basis pf)) :=
+  fun e _ => meas_all (e _).
+
+Definition transport_meas_all {q r} (pf_q : QData q)(U : q = r) (e : Exp q)
+    : Exp (Lower (Basis (transport _ U pf_q))).
+Proof.
+  set (P := fun τ => Exp (Lower τ)).
+  exact (transport P (Basis_eq _ _ pf_q U)^ (Meas_All pf_q e)).
+Defined.
+
+Lemma meas_all_U : forall {q r} (pf_q : QData q) (U : q = r)
+                          (e : Exp q),
+      Meas_All (transport (fun σ => QData σ) U pf_q) (unitary U e)
+    = transport_meas_all pf_q U e.
+Proof.
+  intros.
+  unfold transport_meas_all.
+  destruct U. simpl. reflexivity.
+Qed.
+
+Lemma Basis_Qubit_eq : forall {q} (U : Qubit = q),
+      Basis (U # QubitData) = Bool.
+Proof.
+  intros.
+  refine (Basis_eq _ _ _ _).
+Defined.
+
+Lemma meas_U' : forall {q} (U : Qubit = q) (e : Exp q),
+      Meas (unitary U^ e) 
+    = transport (fun τ => Exp (Lower τ)) (Basis_Qubit_eq U) 
+                (Meas_All (U # QubitData) e).
+Proof.
+  destruct U; intros.
+  simpl.
+  reflexivity.
+Qed.
+
+Lemma meas_U : forall (U : Unitary Qubit) (e : Exp Qubit),
+      Meas (unitary U e) 
+    = transport (fun τ => Exp (Lower τ)) (Basis_Qubit_eq U^) 
+                (Meas_All (U^ # QubitData) e).
+Proof.
+  intros.
+  refine (_ @ meas_U' U^ e).
+  apply (ap (fun p => Meas (unitary p e))).
+  apply (inv_V _)^.
+Qed.
+
+
+Lemma meas_discard_U : forall {q r s} (pf_q : QData q)
+                              (U : q = r)
+                              (e : Exp q) (e' : Exp s),
+      Let_Bang (Meas_All (U # pf_q) (unitary U e)) (fun _ => e')
+    = Let_Bang (Meas_All pf_q e) (fun _ => e').
+Proof.
+  intros.
+  destruct U.
+  reflexivity.
+Qed.
+(* Can I instead define Meas_All by induction on QType, instead of QData? *)
+
+Lemma Meas_All_QubitData : 
+      Meas_All QubitData = Meas.
+Proof. reflexivity. Qed.
+
+Definition U_meas  {q} (U : Qubit = q) (e : Exp Qubit) : Exp (Lower Bool).
+Proof.
+  destruct U.
+  exact (Meas e).
+Defined.
+
+Lemma meas_discard_U_Qubit' : forall {q r} (U : Qubit = q) (e : Exp q) (e' : Exp r),
+      Let_Bang (Meas (unitary U^ e))  (fun _ => e')
+    = Let_Bang (Meas_All (U # QubitData) e) (fun _ => e').
+Proof.
+  destruct U.
+  intros.
+  reflexivity.
+Qed.
+
+(* This is not quite true due to the obnoxious QData terms *)
+Lemma meas_discard_U_Qubit : forall {q} (U : Unitary Qubit) 
+                                    (e : Exp Qubit) (e' : Exp q),
+      Let_Bang (Meas (unitary U e)) (fun _ => e')
+    = Let_Bang (Meas e) (fun _ => e').
+Proof.
+  intros.
+  transitivity (Let_Bang (Meas_All QubitData e) (fun _ : Bool => e')); 
+    [ | reflexivity].
+  rewrite <- (inv_V U).
+  rewrite meas_discard_U_Qubit'.
+  rewrite meas_discard_U.
+
+Abort. 
+
 
 (*
 Section meas_all.

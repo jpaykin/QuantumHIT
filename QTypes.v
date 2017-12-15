@@ -366,34 +366,85 @@ End to_classical_tensor.
 *)
 
 
-(*
-  Fixpoint to_classical' (q : QType') : Type :=
-  match q with
-  | Qubit'        => Bool
-  | Tensor' q1 q2 => (to_classical' q1) * (to_classical' q2)
-  | Lolli' q1 q2  => Unit
-  | Lower' τ _    => τ
-  end.
+  Close Scope nat_scope.
 
+  Inductive QData' : QType' -> Type :=
+  | QubitData' : QData' Qubit'
+  | TensorData' {q1 q2} : QData' q1 -> QData' q2 -> QData' (Tensor' q1 q2)
+  | LowerData' {τ} `{DecidablePaths τ} : QData' (Lower' τ)
+  .
 
-  Instance to_classical_is_trunc : forall q, IsHSet (to_classical' q).
+  Fixpoint Basis' {q} (pf : QData' q) : hSet.
   Proof.
-    induction q; intros; auto.
-    * simpl. apply hset_bool.
-    * simpl. exact _. 
-    * simpl. exact _.
+    destruct pf.
+    * (* Qubit *) exists Bool. exact _.
+    * (* Tensor *) exists ((Basis' q1 pf1) * (Basis' q2 pf2)). exact _.
+    * (* Lower *) exists τ. exact _.
+  Defined.
+  
+Print Finite.
+Search (fcard ?X = fcard ?Y).
+
+
+(*  Inductive QData : QType -> Type :=
+  | QubitData : QData Qubit
+  | TensorData {q1 q2} : QData q1 -> QData q2 -> QData (Tensor q1 q2)
+  | LowerData {τ} `{DecidablePaths τ} : QData (Lower τ)
+  .
+*)
+  Instance ishprop_QData' : forall q, IsHProp (QData' q).
+  Proof.
+    intros q.
+    apply hprop_allpath.
+  Admitted.
+
+  Definition QData'' : QType' -> hProp.
+  Proof.
+    intros q.
+    exists (Trunc -1 (QData' q)).
+    apply istrunc_truncation.
+  Defined.
+ 
+  Definition QData `{Univalence} : QType -> hProp.
+  Proof.
+    apply quotient1_rec_set with (C_point := QData'').
+    * intros q r U. unfold QData''.
+
+      
+    * exact _.
+
+  Close Scope nat_scope.
+
+
+  Definition Basis {q : QType} : QData q -> hSet.
+  Proof.
+    
+
+
+  Fixpoint Basis {q} (pf : QData q) : Type.
+  Proof.
+    destruct pf.
+    * exact Bool.
+    * exact ((Basis _ pf1) * (Basis _ pf2)).
+    * exact τ.
   Defined.
 
-  Definition to_classical_1type (q : QType') : TruncType 0 :=
-  {| trunctype_type := to_classical' q |}.
-    
-(* Can't prove this from the axioms we have, but is reasonable *)
-(*  Axiom to_classical_cell : forall {q r} (U : UMatrix q r), 
-      to_classical_1type q = to_classical_1type r.*)
-(*  Axiom to_classical_linear : 
-        forall {q r s} (U : UMatrix q r) (V : UMatrix r s),
-        to_classical_cell (V o U) = to_classical_cell U @ to_classical_cell V.*)
+  Lemma Basis_eq : forall q r (pf : QData q) (U : q = r),
+    Basis (transport _ U pf) = Basis pf.
+  Proof.
+    destruct U.
+    reflexivity.
+  Defined.
 
+  Lemma Basis_eq' : forall q r (pf : QData q) (U : q = r),
+    transport _ U (Basis pf) = Basis pf.
+  Proof.
+    destruct U.
+    reflexivity.
+  Qed.
+  
+
+(*
 (* need univalence to show that HSet is a 0-type (aka an hSet) *)
 Definition to_classical_hSet `{Univalence} : QType -> hSet.
 Proof.

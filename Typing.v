@@ -18,7 +18,6 @@ Section Typing.
 
   Let Var (_ : QType) := Var'.
 
-
   Inductive WF_Exp : forall {q}, Ctx -> exp Var q -> Type :=
   | WF_Var {Γ q} (x : Var q) :
     Γ = singleton x q ->
