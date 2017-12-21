@@ -3,6 +3,7 @@ Require Import quotient1.
 Require Import Groupoid.
 
 
+Section QTypes.
 Context `{Univalence}.
 
 Inductive QType' :=
@@ -555,8 +556,7 @@ Section PQType.
     end.
   Lemma to_PQType_cell : forall q r (U : UMatrix q r),
     to_PQType' q = to_PQType' r.
-  Abort. (* Using univalence we could probably make this happen, but they
-  wouldn't be the right equalities, so maybe this is not true... *)
+  Abort. (* Not true because PQType do not have higher structure *)
     
   (*
   Definition to_PQType : QType -> PQType.
@@ -714,3 +714,7 @@ Section PQType.
   
 
 End PQType.
+End QTypes.
+
+Infix "⊗" := Tensor (at level 40).
+Infix "⊕" := OPlus (at level 40).

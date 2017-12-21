@@ -2,8 +2,8 @@ Require Import HoTT.
 Require Import quotient1.
 Require Import QTypes2.
 
-
-Context `{Funext}.
+Section Syntax.
+Context `{uni : Univalence}.
 Section Exp.
   
   Variable Var : QType -> Type.
@@ -207,9 +207,6 @@ Definition unitary {q r : QType} (U : q = r) (e : Exp q) : Exp r := transport _ 
 Definition Unitary (q : QType) := q = q.
 
 
-Context `{Univalence}.
-
-
 Section Init.
 
   Definition pinit {q : PQType} : PBasis Exp q -> Exp (from_PQType q).
@@ -228,19 +225,19 @@ Section Init.
   Defined.
 
   Variable q_in q_out : PQType.
-  Context `{FinQType (from_PQType q_in)} `{FinQType (from_PQType q_out)}.
+  Context `{@FinQType uni (from_PQType q_in)} `{@FinQType uni (from_PQType q_out)}.
   Variable f : forall Var, PBasis Var q_in -> PBasis Var q_out.
   Let f' : Matrix (Basis (from_PQType q_in)) (Basis (from_PQType q_out)).
   Proof.
-    apply (@PBasis_to_Matrix _ _ H1 ). 
-    admit (*exact H2.*)(*????*).
+    apply (@PBasis_to_Matrix _ _ _ H).
+    admit (*exact H0.*)(*????*).
     exact f.
   Admitted.
 
   Variable f_UProp : Unitary_Prop f'.
   Let f_U : from_PQType q_in = from_PQType q_out.
   Proof.
-    specialize (@PBasis_to_Unitary q_in q_out H1); intros H.
+    specialize (@PBasis_to_Unitary _ q_in q_out H); intros H''.
     assert (H' : forall (f : forall Var, PBasis Var q_in -> PBasis Var q_out),
       Unitary_Prop f' -> from_PQType q_in = from_PQType q_out).
     { admit (*???*).
@@ -255,14 +252,17 @@ Section Init.
 End Init.
 
 Section Meas.
+  Variable HVar : QType -> Type.
   Variable Var : QType -> Type.
+  Variable from_HVar : forall q, exp Var q -> HVar q.
+
   Fixpoint pmeas (q : PQType)
-           : forall r, exp Var (from_PQType q) -> (PBasis (exp Var) q -> exp Var r) -> exp Var r.
+           : forall r, exp Var (from_PQType q) -> (PBasis HVar q -> exp Var r) -> exp Var r.
   Proof.
-    destruct q; simpl; intros r e f.
-    * (* Hole *) exact (f e).
+    destruct q; simpl in *; intros r e f.
+    * (* Hole *) exact (f (from_HVar _ e)).
     * (* Unit *) exact (let_unit e (f tt)).
-    * (* Tensor *) 
+    * (* Tensor *) simpl in *.
       refine (let_pair e (fun x y => _)).
       refine (pmeas _ _ (var x) (fun x' => _)).
       refine (pmeas _ _ (var y) (fun y' => _)).
@@ -274,145 +274,45 @@ Section Meas.
     * (* Lower *)
       refine (let_bang e f).
   Defined.
+
+
 End Meas.
+
+
+  Fixpoint meas_all {Var} {q : QType} (e : exp Var q) : exp Var (Lower (Basis q)).
+  Proof.
+    refine (pmeas (fun s => exp Var (Lower (Basis s))) _ _ (Hole q) _ e idmap).
+    * intros r e'. exact (meas_all _ r e').
+  Abort (* this doesn't have decreasing fixpoint value *).
+
+
 
   Definition PMeas {q r} (e : Exp (from_PQType q))
                          (f : forall Var, PBasis (exp Var) q -> exp Var r)
                        : Exp r.
   Proof.
     intros Var.
-    exact (pmeas _ q _ (e _) (f _)).
+    exact (pmeas _ _ (fun _ x => x) q _ (e _) (f _)).
   Defined.
 Section Meas_Ax.
 
   Variable q_in q_out : PQType.
-  Context `{FinQType (from_PQType q_in)} `{FinQType (from_PQType q_out)}.
+  Context `{@FinQType uni (from_PQType q_in)} `{@FinQType uni (from_PQType q_out)}.
   Variable f : forall Var, PBasis Var q_in -> PBasis Var q_out.
-  Let f' : Matrix (Basis (from_PQType q_in)) (Basis (from_PQType q_out)).
-  Proof.
-    apply (@PBasis_to_Matrix _ _ H1 ). 
-    admit (*exact H2.*)(*????*).
-    exact f.
-  Admitted.
 
-  Variable f_UProp : Unitary_Prop f'.
-  Let f_U : from_PQType q_in = from_PQType q_out.
-  Proof.
-    specialize (@PBasis_to_Unitary q_in q_out H1); intros H.
-    assert (H' : forall (f : forall Var, PBasis Var q_in -> PBasis Var q_out),
-      Unitary_Prop f' -> from_PQType q_in = from_PQType q_out).
-    { admit (*???*).
-    }
-    apply (H' f f_UProp).
-  Admitted.
+  Variable f_UProp : Unitary_Prop (f' _ _ f).
+
 
 
   Axiom pmeas_U : forall {r} (e : Exp (from_PQType q_in)) 
                              (g : forall Var, PBasis (exp Var) q_out -> exp Var r),
-    PMeas (unitary f_U e) g = PMeas e (fun _ b => g _ (f _ b)).
+    PMeas (unitary (f_U _ _ f f_UProp) e) g = PMeas e (fun _ b => g _ (f _ b)).
   
 End Meas_Ax.
   
 
-End Meas.
-
-  Let P0 q := Basis q -> Exp q.
-  Let P0_One : P0 One := fun _ => Unit.
-  Let P0_Tensor q r (initq : P0 q) (initr : P0 r) : P0 (q ⊗ r).
-    intros z.
-    transparent assert (z' : (Basis q * Basis r)).
-    { rewrite <- Basis_Tensor.
-      exact z.
-    }
-    destruct z' as [x y].
-    exact (Pair (initq x) (initr y)).
-  Defined.
-  Let P0_OPlus q r (initq : P0 q) (initr : P0 r) : P0 (q ⊕ r).
-    intros z.
-    rewrite Basis_OPlus in z.
-    unfold P0 in initq, initr.
-    destruct z as [x | y].
-    * admit (*exact (@Inj0 _ _ (initq x)).*).
-    * admit (*exact (Inj1 (initr y)).*).
-  Admitted.
-  Let P0_Lower {τ} `{IsHSet τ} : P0 (Lower τ).
-  Proof.
-    intros x.
-    exact (Put x).
-  Defined.
-  About QType_ind.
 
 
-  Let P0_point := QType_point P0 P0_One P0_Tensor P0_OPlus (@P0_Lower).
-
-  Let P0_cell : forall q r (U : UMatrix q r),
-      transport P0 (cell _ U) (P0_point q) = P0_point r.
-  Proof.
-    intros.
-    unfold P0_point.
-    admit (*???*).
-  Admitted.
-    
-  Definition Init : forall q, Basis q -> Exp q.
-  Proof.
-    change (forall q, P0 q).
-
-    apply QType_ind with (P_One := @P0_One)
-                         (P_Tensor := @P0_Tensor)
-                         (P_OPlus := @P0_OPlus)
-                         (P_Lower := @P0_Lower)
-                         (QType_cell := P0_cell).
-    * intros. unfold P0. exact _.
-    * intros q r s U V.
-      admit (*??*).
-  Admitted.
-End Init.
-
-(*
-  match q with
-  | One           => fun _ => Unit
-  | Tensor' q1 q2 => fun x => let (x1,x2) := x in 
-                              Pair (Init' q1 x1) (Init' q2 x2)
-  | OPlus' q0 q1  => fun x => match x with
-                              | inl x0 =#> Inj0 (Init' q0 x0)
-                              | inr x1 => Inj1 (Init' q1 x1)
-                              end
-  | Lower' τ _    => fun x => Put x
-  end.
-*)
-  
-
-
-
-
-
-Axiom new_matrix : Bool -> Matrix 1 2.
-Axiom X' : Matrix 2 2.
-Axiom XU : Unitary_Prop X'.
-Definition X : Qubit = Qubit.
-Proof.
-  apply cell.
-  exists X'.
-  exact XU.
-Defined.
-
-Require Import Groupoid.
-Open Scope groupoid_scope.
-
-
-(*
-(* Converting a quantum expression to a vector depends on the linear structure
-of the expression. *)
-
-
-Axiom X_new : forall b, X o new_matrix b = new_matrix (negb b).
-
-Inductive equiv : forall {q}, Exp q -> Exp q -> Type :=
-| U_new : forall (U : Matrix Qubit' Qubit') b b', 
-          U o new_matrix b = new_matrix b' ->
-          equiv (unitary (cell _ U) (New b)) (New b')
-.
-*)
 
 
 Lemma U_compose : forall q1 q2 q3 (U1 : q1 = q2) (U2 : q2 = q3) (e : Exp q1),
@@ -434,14 +334,26 @@ Require Import Groupoid.
 Local Open Scope groupoid_scope.
 
 
-Axiom H' : UMatrix Qubit' Qubit'.
+Axiom H' : Matrix (Basis Qubit) (Basis Qubit).
+Axiom H'_Unitary : Unitary_Prop H'.
+
+Existing Instance M_sym.
 Axiom H'_dag : (H'^ = H')%groupoid.
-Definition H : Unitary Qubit := cell _ H'.
+Definition H'_U : UMatrix (OPlus' One' One') (OPlus' One' One').
+  econstructor.
+  exact H'_Unitary.
+Defined.
+Lemma H'_U_dag : H'_U^ = H'_U.
+Proof.
+  unfold H'_U. simpl.
+  generalize H'_dag; intros H. simpl in H.
+Admitted.
+Definition H : Unitary Qubit := cell _ H'_U.
 Lemma H_dag : H^%path = H.
 Proof.
   unfold H.
-  rewrite (quotient1_inv _ _ U_groupoid _ _ H').
-  rewrite H'_dag.
+  rewrite (quotient1_inv _ _ U_groupoid _ _ H'_U).
+  rewrite H'_U_dag.
   reflexivity.
 Qed.
 
@@ -456,8 +368,7 @@ Qed.
 Definition U_tensor {q1 q1' q2 q2'} (U1 : q1 = q1') (U2 : q2 = q2') :
            q1 ⊗ q2 = q1' ⊗ q2'.
 Proof.
-  destruct U1, U2.
-  reflexivity.
+  refine (ap (fun q => q ⊗ q2) U1 @ ap _ U2).
 Defined.
 
 Lemma U_tensor_pair : forall {q1 q1' q2 q2'} (U1 : q1 = q1') (U2 : q2 = q2')
@@ -467,30 +378,6 @@ Proof.
   destruct U1, U2; intros; auto.
 Qed.
 
-
-Definition U_lolli {Q1 Q1' Q2 Q2'} (U1 : Q1 = Q1') (U2 : Q2 = Q2') : (Q1 ⊸ Q2) = (Q1' ⊸ Q2').
-Proof.
-  destruct U1.
-  destruct U2.
-  reflexivity.
-Defined.
-
-
-Definition apply_U_lolli {q1 q1' q2 q2'} (U1 : q1 = q1') (U2 : q2 = q2') 
-                    (f : q1 --o q2) : q1' --o q2' := fun _ x => 
-  transport _ U2 (f _ (transport _ U1^ x)).
-
-Lemma U_lolli_unitary : forall q1 q1' q2 q2' (U1 : q1 = q1') (U2 : q2 = q2')
-                               (f : q1 --o q2),
-      unitary (U_lolli U1 U2) (Abs f)
-    = Abs (apply_U_lolli U1 U2 f).
-Proof.
-  destruct U1, U2; intros.
-  unfold apply_U_lolli.
-  reflexivity.
-Qed.
-
-Notation "U1 -u⊸ U2" := (U_lolli U1 U2) (at level 30).
   
 
 Lemma unitary_id : forall Q (e : Exp Q), e = unitary 1 e.
@@ -502,8 +389,85 @@ Lemma U_not_id : forall Q (U : Q = Q) (e : Exp Q),
                  U = 1%path.
 Abort.
 
+(* This only works if q does not have any holes in it *)
+Inductive NoHoles : PQType -> Type :=
+| NHOne : NoHoles POne
+| NHTensor {q1 q2} : NoHoles q1 -> NoHoles q2 -> NoHoles (PTensor q1 q2)
+| NHOPlus {q1 q2} : NoHoles q1 -> NoHoles q2 -> NoHoles (POPlus q1 q2)
+| NHLower {τ} `{IsHSet τ} : NoHoles (PLower τ).
+Class no_holes (q : PQType) := {has_no_holes : NoHoles q}.
+Instance no_holes_One : no_holes POne := { has_no_holes := NHOne }.
+Instance no_holes_Tensor {q1 q2} `{nh1 : no_holes q1} `{nh2 : no_holes q2} :no_holes (PTensor q1 q2).
+Proof.
+    destruct nh1, nh2.
+    constructor.
+    exact (NHTensor has_no_holes0 has_no_holes1).
+Qed.
+
+Definition no_holes_OPlus {q1 q2} `{nh1 : no_holes q1} `{nh2 : no_holes q2} :no_holes (POPlus q1 q2).
+Proof.
+    destruct nh1, nh2.
+    constructor.
+    exact (NHOPlus has_no_holes0 has_no_holes1).
+Qed.
+Definition no_holes_Lower {τ} `{IsHSet τ} : no_holes (PLower τ).
+Proof.
+    constructor.
+    exact (NHLower).
+Qed.
+
+Lemma NoHoles_Hole_inv : forall q, ~ NoHoles (Hole q).
+Admitted.
+Lemma no_holes_Hole_inv : forall q, ~ no_holes (Hole q).
+Proof.
+  intros q [H].
+  apply NoHoles_Hole_inv in H. auto.
+Qed.
+
+Lemma no_holes_Tensor_inv : forall q1 q2, no_holes (PTensor q1 q2) -> no_holes q1 * no_holes q2.
+Admitted.
+Lemma no_holes_OPlus_inv : forall q1 q2, no_holes (POPlus q1 q2) -> no_holes q1 * no_holes q2.
+Admitted.
 
 
+Lemma no_holes_PBasis : forall q `{no_holes q} (Var1 Var2 : QType -> Type), 
+      PBasis Var1 q = PBasis Var2 q.
+Proof.
+  induction q; intros nh_q Var1 Var2; simpl.
+  * apply no_holes_Hole_inv in nh_q. contradiction.
+  * reflexivity.
+  * apply no_holes_Tensor_inv in nh_q.
+    destruct nh_q.
+    erewrite IHq1, IHq2; auto.
+  * apply no_holes_OPlus_inv in nh_q.
+    destruct nh_q.
+    erewrite IHq1, IHq2; auto.
+  * reflexivity.
+Qed.
+
+
+Instance basis_HSet q : IsHSet (Basis q).
+Proof.
+  unfold Basis. exact _.
+Qed.
+(*
+Definition Meas_All q `{no_holes q} (e : Exp (from_PQType q)) : Exp (Lower (Basis (from_PQType q))).
+  refine (PMeas e (fun x b => put _)).
+  simpl.
+  set (b' := transport idmap (no_holes_PBasis _ (exp x) Basis) b). simpl in b'.
+  apply pbasis_basis. 
+(*    Set Printing Universes.
+  exact b'.*)
+Admitted.
+
+Definition Meas_Discard q `{no_holes q}
+           (e : Exp (from_PQType q)) : Exp (Lower Overture.Unit) :=
+  Let_Bang (Meas_All q e) (fun _ => Put tt).
+
+Lemma Meas_Discard_U : forall q r (U : from_PQType q = from_PQType r)
+*)
+
+(*
 Inductive IsTrue : Bool -> Type :=
 | Istrue : IsTrue true.
 
@@ -532,49 +496,8 @@ Proof.
   intros. 
   refine (IsTrue_eq _ _ 1 pf Istrue).
 Defined.
-  
-
-Inductive IsQubit : QType -> Type :=
-| IsQ : IsQubit Qubit.
-Definition fromQubit {q} (pfQubit : IsQubit q) : Exp Qubit -> Exp q.
-Proof.
-  destruct pfQubit.
-  exact (fun e => e).
-Defined.
-Definition toQubit {q} (pfQubit : IsQubit q) : Exp q -> Exp Qubit.
-Proof.
-  destruct pfQubit.
-  exact (fun e => e).
-Defined.
-
-(* I don't think this lemma is actually true. To prove the corresponding
-property for booleans, we rely on the fact that Bool is an HSet, but this is not
-true of QType. *)
-Lemma IsQubit_eq : forall (pf : IsQubit Qubit), pf = IsQ.
-Abort. 
-(* If it were true, we could prove the lemmas below *)
-(*
-Lemma bad : forall q r (U : q = r) (pf_q : IsQubit q) (pf_r : IsQubit r) (e : Exp q),
-    unitary U e = fromQubit pf_r (toQubit pf_q e).
-Proof.
-  destruct U.
-  destruct pf_q.
-  intros. 
-  simpl.
-  transitivity (fromQubit IsQ e); [reflexivity | ].
-  apply (ap (fun pf => fromQubit pf e)).
-  refine (IsQubit_eq _)^.
-Defined.
-
-Lemma bad_pos : unitary H (New False) = New False.
-Proof.
-  exact (bad _ _ H IsQ IsQ _).
-Defined.
-Lemma bad_flip : Meas (unitary H (New False)) = Meas (New False).
-Proof.
-  apply ap. apply bad_pos.
-Defined
 *)
+
 
 
 Section measure_discard.
@@ -584,239 +507,48 @@ Section measure_discard.
   (* This should be defined mutually recursively with measure_discard *)
 (*  Variable prepare0 : forall (q : QType), Exp q. *)
 
-  Fixpoint meas_discard' {q} (e : exp (fun _ => Unit) q) : exp Var (Lower Unit).
+  Fixpoint meas_discard' {q} (e : exp (fun _ => Overture.Unit) q) 
+                                : exp Var (Lower Overture.Unit).
   Proof.
-    destruct e as [ q x | q r f | q r e1 e2 (* abstraction *)
+    destruct e as [ q x 
                   | q r e1 e2 | q r s e e' (* pairs *)
-                  | τ H x | τ H q e e' (* let! *)
-                  | | e (* new *) ].
+                  | | q e e' (* unit *)
+                  | q0 q1 e | q0 q1 e | q0 q1 r e f0 f1
+                  | τ H x | τ H q e e' (* let! *)].
     * exact (put x).
-    * apply (meas_discard' _ (f tt)).
-    * exact (let_bang (meas_discard' _ e1) (fun _ => 
-             let_bang (meas_discard' _ e2) (fun _ =>
-             put tt))).
     * exact (let_bang (meas_discard' _ e1) (fun _ => 
              let_bang (meas_discard' _ e2) (fun _ =>
              put tt))).
     * exact (let_bang (meas_discard' _ e) (fun _ =>
              meas_discard' _ (e' tt tt))).
     * exact (put tt).
-    * admit (*exact (let_bang e (fun x => meas_discard' _ (e' x))).*).
+    * refine (let_bang (meas_discard' _ e) (fun _ =>
+              let_bang (meas_discard' _ e') (fun _ =>
+              put tt))).
+    * refine (meas_discard' _ e).
+    * refine (meas_discard' _ e).
+    * admit (*refine (let_unit e (meas_discard' _ e'))*).
     * exact (put tt).
-    * exact (meas_discard' _ e).
+    * admit (*exact (let_bang e (fun x => meas_discard' _ (e' x))).*).
   Admitted.
 
 End measure_discard.
 
-Definition Meas_Discard {q} (e : Exp q) : Exp (Lower Unit) :=
+Definition Meas_Discard {q} (e : Exp q) : Exp (Lower Overture.Unit) :=
   fun _ => meas_discard' _ (e _).
 
-
-Section meas_all.
-
-  Variable Var : QType -> Type.
-
-  Fixpoint meas_all {q} (pf : QData q) (e : exp Var q) : exp Var (Lower (Basis pf)).
-  Proof.
-    destruct pf.
-    * (* Qubit *) exact (meas e).
-    * (* Tensor *)
-      refine (let_pair e (fun x₁ x₂ => _)).
-      refine (let_bang (meas_all q1 pf1 (var x₁)) (fun y₁ => _)).
-      refine (let_bang (meas_all q2 pf2 (var x₂)) (fun y₂ => _)).
-      refine (put (y₁,y₂)).
-    * (* Lower *)
-      exact e.
-  Defined.
-
-End meas_all.
-Arguments meas_all {Var} {q} {pf} e.
-
-Definition Meas_All {q} (pf : QData q) : Exp q -> Exp (Lower (Basis pf)) :=
-  fun e _ => meas_all (e _).
-
-Definition transport_meas_all {q r} (pf_q : QData q)(U : q = r) (e : Exp q)
-    : Exp (Lower (Basis (transport _ U pf_q))).
-Proof.
-  set (P := fun τ => Exp (Lower τ)).
-  exact (transport P (Basis_eq _ _ pf_q U)^ (Meas_All pf_q e)).
-Defined.
-
-Lemma meas_all_U : forall {q r} (pf_q : QData q) (U : q = r)
-                          (e : Exp q),
-      Meas_All (transport (fun σ => QData σ) U pf_q) (unitary U e)
-    = transport_meas_all pf_q U e.
-Proof.
-  intros.
-  unfold transport_meas_all.
-  destruct U. simpl. reflexivity.
-Qed.
-
-Lemma Basis_Qubit_eq : forall {q} (U : Qubit = q),
-      Basis (U # QubitData) = Bool.
-Proof.
-  intros.
-  refine (Basis_eq _ _ _ _).
-Defined.
-
-Lemma meas_U' : forall {q} (U : Qubit = q) (e : Exp q),
-      Meas (unitary U^ e) 
-    = transport (fun τ => Exp (Lower τ)) (Basis_Qubit_eq U) 
-                (Meas_All (U # QubitData) e).
-Proof.
-  destruct U; intros.
-  simpl.
-  reflexivity.
-Qed.
-
-Lemma meas_U : forall (U : Unitary Qubit) (e : Exp Qubit),
-      Meas (unitary U e) 
-    = transport (fun τ => Exp (Lower τ)) (Basis_Qubit_eq U^) 
-                (Meas_All (U^ # QubitData) e).
-Proof.
-  intros.
-  refine (_ @ meas_U' U^ e).
-  apply (ap (fun p => Meas (unitary p e))).
-  apply (inv_V _)^.
-Qed.
-
-
-Lemma meas_discard_U : forall {q r s} (pf_q : QData q)
-                              (U : q = r)
-                              (e : Exp q) (e' : Exp s),
-      Let_Bang (Meas_All (U # pf_q) (unitary U e)) (fun _ => e')
-    = Let_Bang (Meas_All pf_q e) (fun _ => e').
-Proof.
-  intros.
-  destruct U.
-  reflexivity.
-Qed.
-(* Can I instead define Meas_All by induction on QType, instead of QData? *)
-
-Lemma Meas_All_QubitData : 
-      Meas_All QubitData = Meas.
-Proof. reflexivity. Qed.
-
-Definition U_meas  {q} (U : Qubit = q) (e : Exp Qubit) : Exp (Lower Bool).
-Proof.
-  destruct U.
-  exact (Meas e).
-Defined.
-
-Lemma meas_discard_U_Qubit' : forall {q r} (U : Qubit = q) (e : Exp q) (e' : Exp r),
-      Let_Bang (Meas (unitary U^ e))  (fun _ => e')
-    = Let_Bang (Meas_All (U # QubitData) e) (fun _ => e').
-Proof.
-  destruct U.
-  intros.
-  reflexivity.
-Qed.
-
-(* This is not quite true due to the obnoxious QData terms *)
-Lemma meas_discard_U_Qubit : forall {q} (U : Unitary Qubit) 
-                                    (e : Exp Qubit) (e' : Exp q),
-      Let_Bang (Meas (unitary U e)) (fun _ => e')
-    = Let_Bang (Meas e) (fun _ => e').
-Proof.
-  intros.
-  transitivity (Let_Bang (Meas_All QubitData e) (fun _ : Bool => e')); 
-    [ | reflexivity].
-  rewrite <- (inv_V U).
-  rewrite meas_discard_U_Qubit'.
-  rewrite meas_discard_U.
-
-Abort. 
-
-
-(*
-Section meas_all.
-
-  Variable Var : QType -> Type.
-  Context `{Univalence}.
-
-  Lemma Lower_to_classical_lolli : forall q r, Lower (to_classical (q ⊸ r)) = Lower Unit.
-  Admitted.
-
-
-
-  Fixpoint meas_all {q} (e : exp to_classical q) : exp Var (Lower (to_classical q)).
-  Proof.
-    destruct e as [ q x | q r f | q r e1 e2 (* abstraction *)
-                  | q r e1 e2 | q r s e e' (* pairs *)
-                  | τ H x | τ H q e e' (* let! *)
-                  | | e (* new *) ].
-    * exact (put x).
-    * rewrite Lower_to_classical_lolli.
-      exact (put tt).
-    * set (e1' := meas_all _ e1). rewrite Lower_to_classical_lolli in e1'.
-      set (e2' := meas_all _ e2).
-      rewrite to_classical_lolli in e1'.
-      exact (app e1' e2').
-    * rewrite to_classical_tensor.
-      exact (pair (meas_all _ _ e1) (meas_all _ _ e2)).
-    * set (e0 := meas_all _ _ e). 
-      rewrite to_classical_tensor in e0. 
-      exact (let_pair e0 (fun x y => meas_all _ _ (e' x y))).
-    * exact (put x).
-    * exact (let_bang (meas_all _ _ e) (fun x => meas_all _ _ (e' x))).
-    * exact (put b).
-    * exact (meas_all _ _ e).
-  Defined.
-
-(*
-  Fixpoint meas_all {q} {Var} (e : exp (fun r => Var (to_classical r)) q) : exp Var (to_classical q).
-  Proof.
-    destruct e as [ q x | q r f | q r e1 e2 (* abstraction *)
-                  | q r e1 e2 | q r s e e' (* pairs *)
-                  | τ H x | τ H q e e' (* let! *)
-                  | | e (* new *) ].
-    * exact (var x).
-    * rewrite to_classical_lolli.
-      refine (abs (fun x => meas_all _ _ (f x))).
-    * set (e1' := meas_all _ _ e1).
-      set (e2' := meas_all _ _ e2).
-      rewrite to_classical_lolli in e1'.
-      exact (app e1' e2').
-    * rewrite to_classical_tensor.
-      exact (pair (meas_all _ _ e1) (meas_all _ _ e2)).
-    * set (e0 := meas_all _ _ e). 
-      rewrite to_classical_tensor in e0. 
-      exact (let_pair e0 (fun x y => meas_all _ _ (e' x y))).
-    * exact (put x).
-    * exact (let_bang (meas_all _ _ e) (fun x => meas_all _ _ (e' x))).
-    * exact (put b).
-    * exact (meas_all _ _ e).
-  Defined.
-*)
-
-End meas_all.
-
-Definition Meas_All {q} (e : Exp q) : Exp (to_classical q) :=
-  fun Var => meas_all (e _).
-  
-
-Lemma unitary_discard' `{Univalence} : 
-      forall {q1 q2} (U : q1 = q2) {q} (e1 : Exp q1) (e : Exp q),
-      Let_Bang (Meas_All (unitary U e1)) (fun _ => e) 
-    = Let_Bang (Meas_All e1) (fun _ => e).
+Lemma Meas_Discard_U : forall {q r} (U : q = r) (e : Exp q),
+    Meas_Discard (U # e) = Meas_Discard e.
 Proof.
   destruct U; intros.
   reflexivity.
 Qed.
 
-Lemma Meas_All_Qubit `{Univalence} : forall (e : Exp Qubit),
-    Meas_All e = Meas e.
-Proof.
-  intros e. apply path_forall; intros var.
-  unfold Meas_All.
-
-Lemma unitary_discard `{Univalence} : 
-      forall (U : Unitary Qubit) {q} (e : Exp Qubit) (e' : Exp q),
-      Let_Bang (Meas (unitary U e)) (fun _ => e')
-    = Let_Bang (Meas e) (fun _ => e').
-Proof.
-  intros.
-  set (p := unitary_discard' U e e').
-  simpl in p.
-
+(*
+Lemma Meas_Discard_Qubit : forall (e : Exp Qubit),
+    Meas_Discard e = Case_Of e (fun _ z => let_unit (var z) (put tt))
+                               (fun _ z => let_unit (var z) (put tt)).
 *)
+
+
+End Syntax.
