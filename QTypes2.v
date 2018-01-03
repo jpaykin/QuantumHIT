@@ -6,6 +6,7 @@ Require Import Groupoid.
 Section QTypes.
 Context `{Univalence}.
 
+
 Inductive QType' :=
 | One' : QType'
 | OPlus' : QType' -> QType' -> QType'
