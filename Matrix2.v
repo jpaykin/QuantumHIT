@@ -21,19 +21,75 @@ Section DecidablePaths.
       apply b'^.
   Qed.
 
+  Lemma del_distr : forall i j n, (del i j * n = if i =? j then n else 0)%nat.
+  Proof.
+    intros.
+    unfold del.
+    destruct (i =? j); auto. simpl.
+    rewrite <- nat_plus_n_O.
+    reflexivity.
+  Qed.
+    
+
 End DecidablePaths.
 Notation "x =? y" := (dec_paths x y) (at level 25).
 Notation "δ_{ i }[ j ]" := (del i j) (at level 40).
 
 
+Section finplus.
+  Context `{funext : Funext}.
+
+(*
+  Lemma finplus_del : forall {I} `{Finite I} i,
+    finplus (fun x => δ_{x}[i]) = 1%nat.
+  Proof.
+    intros.
+    unfold del.
+    destruct H.
+    unfold finplus. 
+    simpl.
+    set (A := { x : I & Fin (if x =? i then 1 else 0)%nat}).
+    unfold merely in merely_equiv_fin.
+    simpl in *.
+    generalize dependent merely_equiv_fin.
+    apply Trunc_ind; [intros; exact _ | ].
+    intros equiv. destruct equiv. simpl. 
+    destruct equiv_isequiv. simpl.
+  Admitted.
+*)
+
+  Lemma finplus_del : forall {I} `{Finite I} i (f : I -> nat),
+    finplus (fun x => if i =? x then f x else 0%nat) = f i.
+  Admitted.
+
+  Lemma finplus_del' : forall {I J} `{Finite I} (f : I -> J -> nat) i j,
+        f i j = finplus (fun k => (δ_{i}[k] * f k j))%nat.
+  Proof.
+    intros I J finI f i j.
+    set (g := (fun x => f x j)).
+    transitivity (g i); auto.
+    rewrite <- finplus_del.
+    apply ap. 
+    apply path_arrow.
+    intros x.
+    rewrite del_distr.
+    reflexivity.
+  Defined.
+
+    Lemma finplus_sym : forall I J `{Finite I} `{Finite J} (f : I -> J -> nat),
+      finplus (fun i : I => finplus (fun j : J => f i j))
+    = finplus (fun j : J => finplus (fun i : I => f i j)).
+    Admitted.
+
+  Lemma finplus_distr : forall I `{Finite I} f n,
+    ((finplus f) * n = finplus (fun i => f i * n))%nat.
+  Admitted.
+
+End finplus.
 
 
 Section Matrix.
   Context `{funext : Funext}.
-
-  Lemma finplus_del : forall {I J} `{Finite I} `{Finite J} (f : I -> J -> nat) i j,
-        f i j = finplus (fun k => (δ_{i}[k] * f k j))%nat.
-  Admitted.
 
 
   Inductive Matrix (I J : Type) := 
@@ -122,23 +178,32 @@ Section Matrix.
     Proof.
       destruct A. simpl. 
       prep_matrix_equality.
-      rewrite (finplus_del n).
+      rewrite (finplus_del' n).
       reflexivity.
     Qed.
 
 
-    Lemma finplus_sym : forall I J `{Finite I} `{Finite J} (f : I -> J -> nat),
-      finplus (fun i : I => finplus (fun j : J => f i j))
-    = finplus (fun j : J => finplus (fun i : I => f i j)).
-    Admitted.
-
-
-    Lemma Matrix_assoc : forall {I J K L} (A : Matrix I J) (B : Matrix J K) (C : Matrix K L),
+    Lemma Matrix_assoc : forall {I J K L} 
+                         (A : Matrix I J) (B : Matrix J K) (C : Matrix K L),
           (C o (B o A)) = (C o B) o A.
     Proof.
       destruct A, B, C. simpl.
       prep_matrix_equality. rename j into l.
       set (f := fun k j => (n i j * n0 j k)%nat).
+      transitivity (finplus (fun k => finplus (fun j =>
+                                       n i j * n0 j k * n1 k l)))%nat.
+      { apply ap. apply path_arrow. intros k.
+        apply finplus_distr. }
+    
+      transitivity (finplus (fun j => finplus (fun k => 
+                                      n i j * n0 j k * n1 k l)))%nat.
+      { apply finplus_sym. }
+      
+      apply ap. apply path_arrow. intros k.
+      rewrite mult_comm.
+      rewrite finplus_distr.
+      apply ap. apply path_arrow. intros k'.
+      Open Scope nat_scope.
       admit (* this is true, just arithmetic *).
     Admitted.
   End groupoid_properties.
@@ -320,9 +385,40 @@ Section Matrix.
     Qed.
 
   Instance UnitaryMatrix_trans : Transitive UnitaryMatrix.
+  Proof.
+
   Admitted.
 
-  Axiom U_groupoid : groupoid _ UnitaryMatrix.
+  Print groupoid.
+
+  Lemma UnitaryMatrix_1_l : forall I J (U : UnitaryMatrix I J),
+    1 o U = U.
+  Admitted.
+
+  Lemma UnitaryMatrix_1_r : forall I J (U : UnitaryMatrix I J),
+    U o 1 = U.
+  Admitted.
+
+  Lemma UnitaryMatrix_assoc : forall I J K L 
+        (U : UnitaryMatrix I J) (V : UnitaryMatrix J K) (W : UnitaryMatrix K L),
+        W o (V o U) = W o V o U.
+  Admitted.
+
+  Lemma UnitaryMatrix_V_r : forall I J (U : UnitaryMatrix I J),
+        U o U^ = 1.
+  Admitted.
+
+  Lemma UnitaryMatrix_V_l : forall I J (U : UnitaryMatrix I J),
+        U^ o U = 1.
+  Admitted.
+
+  Lemma U_groupoid : groupoid _ UnitaryMatrix.
+    exact(
+    Build_groupoid _ _ 
+                   UnitaryMatrix_1_l UnitaryMatrix_1_r
+                   UnitaryMatrix_assoc
+                   UnitaryMatrix_V_r UnitaryMatrix_V_l).
+  Defined.
 
   End UGroupoid.
 
