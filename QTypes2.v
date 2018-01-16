@@ -1,6 +1,7 @@
 Require Import HoTT.
 Require Import quotient1.
 Require Import Groupoid.
+Require Import Matrix2.
 
 
 Section QTypes.
@@ -16,209 +17,97 @@ Inductive QType' :=
 
 Fixpoint Basis' (q : QType') : Type :=
   match q with
-  | One' => Unit
-  | OPlus' q1 q2 => Basis' q1 + Basis' q2
+  | One'          => Unit
+  | OPlus' q1 q2  => Basis' q1 + Basis' q2
   | Tensor' q1 q2 => Basis' q1 * Basis' q2
-  | Lower' τ _ => τ
+  | Lower' τ _    => τ
   end.
-
-Definition bdec_paths {A} `{DecidablePaths A} (x y : A) : Bool :=
-  if dec_paths x y then true else false.
-Notation "x =? y" := (dec_paths x y) (at level 25).
-
-
-Section Matrix.
-
-(*  Context `{Funext}.*)
-(*Axiom C : Type.
-Axiom nat_to_C : nat -> C.
-Coercion nat_to_C : nat >-> C.*)
-
-  Inductive Matrix (I J : Type) := 
-  | MkMatrix `{Finite I} `{Finite J} :
-              (I -> J -> nat) -> Matrix I J.
-  (* Here, nat is a stand-in for C *)
-  Arguments MkMatrix {I J} {FinI} {FinJ} f : rename.
-
-  Definition lookupMatrix {I J} (A : Matrix I J) (i : I) (j : J) :=
-    match A with
-    | MkMatrix _ _ A' => A' i j
-    end.
-  Notation "A [ i , j ]" := (lookupMatrix A i j) (at level 10).
+Instance Basis'_HSet q : IsHSet (Basis' q).
+Proof.
+  induction q; try (exact _).
+Qed.
 
 
 
-  Section Id.
+Section Q_groupoid.
 
-    Variable I : Type.
-(*    Axiom finI : Finite I. (* how to resolve this?? *)*)
-    Definition Id : Matrix I I. (*MkMatrix (fun i i' => if i =? i' then 1 else 0).*)
-    Admitted.
-  End Id.
-
-  Instance M_refl : Reflexive Matrix := Id.
-
-  Definition Compose {I J K} (A : Matrix I J) (B : Matrix J K) : Matrix I K :=
-    match A, B with
-    | MkMatrix _ _ A', MkMatrix _ _ B' => 
-      MkMatrix (fun i k => finplus (fun (j : J) => (A' i j * B' j k)%nat))
-    end.
-  Instance M_trans : Transitive Matrix := @Compose.
-    
-
-  Definition Transpose {I J} (A : Matrix I J) : Matrix J I :=
-    match A with
-    | MkMatrix _ _ A' => MkMatrix (fun j i => A' i j) 
-    (* for Complex numbers, this should be (A' i j)^† *)
-    end.
-  Instance M_sym : Symmetric Matrix := @Transpose.
-
-  Open Scope groupoid_scope.
-  Record Unitary_Prop' {I J} `{Finite I} `{Finite J} (A : Matrix I J) :=
-    { A_A_dag : A^ o A = 1
-    ; A_dag_A : A o A^ = 1
-    ; U_size  : fcard I = fcard J
-    }.
-  Definition Unitary_Prop {I J} (A : Matrix I J) := 
-    match A with
-    | MkMatrix _ _ _ => Unitary_Prop' A
-    end.
-
-  Definition Kron {I J I' J'} (A : Matrix I J) (B : Matrix I' J') : Matrix (I * I') (J * J') :=
-    match A, B with
-    | MkMatrix _ _ _, MkMatrix _ _ _ => MkMatrix (fun (x : I*I') (y : J*J') =>
-        let (i,i') := x in
-        let (j,j') := y in
-        (A [i , j] * B [i' ,j'])%nat
-      )
-    end.
-
-  Definition DSum {I J I' J'} (A : Matrix I J) (B : Matrix I' J') : Matrix (I + I') (J + J') :=
-    match A, B with
-    | MkMatrix _ _ _, MkMatrix _ _ _ => MkMatrix (fun (x : I + I') (y : J + J') =>
-        match x, y with
-        | inl i, inl j => A[i,j]
-        | inr i', inr j' => B[i',j']
-        | _, _ => 0
-        end
-    )
-    end.
-
-  (* I think this is true... *)
-  Global Instance M_decPaths : forall {I J}, DecidablePaths (Matrix I J).
+  Definition Unitary' (q r : QType') := UMatrix (Basis' q) (Basis' r).
+  Instance Unitary'_refl : Reflexive Unitary'.
   Proof.
-    intros I J [pfI pfJ A] [pfI' pfJ' B].
-    assert (Decidable (pfI = pfI')) by exact _.
-    assert (Decidable (pfJ = pfJ)) by exact _.
-    assert (Decidable (A = B)).
-    { admit. (*??*) }
-  Admitted.
-  (* which means that Matrix I J is an HSet *)
+    intros q. unfold Unitary'. apply UMatrix_refl.
+  Defined.
+  Instance Unitary'_sym : Symmetric Unitary'.
+  Proof.
+    intros q r. unfold Unitary'. apply UMatrix_sym.
+  Defined.
+  Instance Unitary'_trans : Transitive Unitary'.
+  Proof.
+    intros q r s. unfold Unitary'. apply UMatrix_trans.
+  Defined.
 
-  Global Instance Unitary_Prop_hprop : forall {I J} (A : Matrix I J),
-    IsHProp (Unitary_Prop A).
+  Instance list_Trunc n A `{IsTrunc n A} : IsTrunc n (list A).
+  Admitted.
+
+  Instance Vector_HSet {I} `{IsHSet I} : IsHSet (Vector I).
+  Proof.
+    exact _.
+  Qed.
+  Instance Matrix_HSet {I J} `{IsHSet I} `{IsHSet J} : IsHSet (Matrix I J).
+  Admitted. (* how to prove things about record constructors? *)
+  Instance UnitaryProp_HProp : forall I J `{IsHSet I} `{IsHSet J} (A : Matrix I J), 
+          IsHProp (UnitaryProp A).
   Proof.
     intros.
-    intros pf1 pf2.
-    destruct A.
-    destruct pf1, pf2.
-    assert (Contr (A_A_dag0 = A_A_dag1)) by exact _.
-    assert (Contr (A_dag_A0 = A_dag_A1)) by exact _.
-    assert (Contr (U_size0 = U_size1)) by exact _.
-    assert ({| A_A_dag := A_A_dag0; A_dag_A := A_dag_A0; U_size := U_size0 |}
-          = {| A_A_dag := A_A_dag1; A_dag_A := A_dag_A1; U_size := U_size1 |}).
-    { admit. }
-  (* I think this is true *)
   Admitted.
-
-  (* todo: *)
-
-  Lemma refl_Unitary : forall I, Unitary_Prop (Id I).
-  Admitted.
-
-  Lemma trans_Unitary : forall {I J K} (A : Matrix I J) (B : Matrix J K),
-    Unitary_Prop A -> Unitary_Prop B -> Unitary_Prop (B o A).
-  Admitted.
-
-  Lemma symm_Unitary : forall {I J} (A : Matrix I J),
-    Unitary_Prop A -> Unitary_Prop A^.
-  Admitted.
-
-  Lemma kron_Unitary : forall {I J I' J'} (A : Matrix I J) (B : Matrix I' J'),
-    Unitary_Prop A -> Unitary_Prop B -> Unitary_Prop (Kron A B).
-  Admitted.
-
-  Lemma dsum_Unitary : forall {I J I' J'} (A : Matrix I J) (B : Matrix I' J'),
-    Unitary_Prop A -> Unitary_Prop B -> Unitary_Prop (DSum A B).
-  Admitted.
-
-  Lemma kron_compose : forall {I1 I2 I3 J1 J2 J3}
-                              (A1 : Matrix I1 I2) (A2 : Matrix I2 I3)
-                              (B1 : Matrix J1 J2) (B2 : Matrix J2 J3),
-    Kron (A2 o A1) (B2 o B1) = Kron A2 B2 o Kron A1 B1.
-  Admitted.
-
-End Matrix.
-
-Section UMatrix.
-
-  Definition UMatrix (q r : QType') := {A : Matrix (Basis' q) (Basis' r) & Unitary_Prop A}.
-
-  Global Instance U_refl : Reflexive UMatrix.
-  Admitted.
-
-  Global Instance U_trans : Transitive UMatrix.
-  Admitted.
-
-  Global Instance U_sym : Symmetric UMatrix.
-  Admitted.
-
-  Lemma U_groupoid : groupoid _ UMatrix.
+  Instance UMatrix_HSet : forall I J `{IsHSet I} `{IsHSet J}, IsHSet (UMatrix I J).
   Proof.
-    constructor.
-    * admit.
-    * admit.
-    * admit.
-    * admit.
-    * admit.
-  Admitted.
-  
-  Definition U_tensor {q q' r r'} (U : UMatrix q q') (V : UMatrix r r') :
-             UMatrix (Tensor' q r) (Tensor' q' r').
-  Admitted.
-
-  Open Scope groupoid_scope.
-
-  Lemma U_tensor_compose : forall {q1 q2 q3 r1 r2 r3}
-                                  (U1 : UMatrix q1 q2) (U2 : UMatrix q2 q3)
-                                  (V1 : UMatrix r1 r2) (V2 : UMatrix r2 r3),
-        U_tensor (U2 o U1) (V2 o V1)
-      = (U_tensor U2 V2) o (U_tensor U1 V1).
-  Admitted.
-
-  Definition U_oplus {q q' r r'} (U : UMatrix q q')(V : UMatrix r r') :
-             UMatrix (OPlus' q r) (OPlus' q' r').
-  Admitted.
-
-  Lemma U_oplus_compose : forall {q1 q2 q3 r1 r2 r3}
-                                 (U1 : UMatrix q1 q2) (U2 : UMatrix q2 q3)
-                                 (V1 : UMatrix r1 r2) (V2 : UMatrix r2 r3),
-        U_oplus (U2 o U1) (V2 o V1)
-      = (U_oplus U2 V2) o (U_oplus U1 V1).
-  Admitted.
-
-  Global Instance U_hset : forall {q r}, IsHSet (UMatrix q r).
+    exact _.
+  Qed.
+  Instance Unitary'_HSet : forall q r, IsHSet (Unitary' q r).
   Proof.
-    intros q r.
     exact _.
   Qed.
 
-End UMatrix.
+  Definition Q_groupoid : groupoid _ Unitary'.
+  Proof.
+    constructor; intros; unfold Unitary' in *.
+    * apply (g_1_l U_groupoid).
+    * apply (g_1_r U_groupoid).
+    * apply (g_assoc U_groupoid).
+    * apply (g_V_r U_groupoid).
+    * apply (g_V_l U_groupoid).
+  Defined.
+
+  Definition U_tensor {q r q' r'} (U : Unitary' q r) (V : Unitary' q' r')
+             : Unitary' (Tensor' q q') (Tensor' r r') :=
+    UMatrix_kron _ _ _ _ U V.
+  Definition U_plus {q r q' r'} (U : Unitary' q r) (V : Unitary' q' r')
+             : Unitary' (OPlus' q q') (OPlus' r r') :=
+    UMatrix_plus _ _ _ _ U V.
+  Open Scope groupoid_scope.
+  Lemma U_tensor_compose : forall q r s q' r' s' 
+                                  (U1 : Unitary' q r) (U2 : Unitary' r s)
+                                  (V1 : Unitary' q' r') (V2 : Unitary' r' s'),
+    U_tensor (U2 o U1) (V2 o V1) = (U_tensor U2 V2) o (U_tensor U1 V1).
+  Admitted.
+  Lemma U_plus_compose : forall q r s q' r' s' 
+                                  (U1 : Unitary' q r) (U2 : Unitary' r s)
+                                  (V1 : Unitary' q' r') (V2 : Unitary' r' s'),
+    U_plus (U2 o U1) (V2 o V1) = (U_plus U2 V2) o (U_plus U1 V1).
+  Admitted.
+
+
+
+End Q_groupoid.
+
 
 Section QType.
 
   Open Scope groupoid_scope.
-  Definition QType := quotient1 U_groupoid.
+  Existing Instance Unitary'_HSet.
+  
+  Definition QType := quotient1 Q_groupoid.
+
 
   Definition Tensor : QType -> QType -> QType.
   Proof.
@@ -226,20 +115,20 @@ Section QType.
     apply @U_tensor_compose.
   Defined.
   Lemma Tensor_point : forall q r, 
-        Tensor (point U_groupoid q) (point U_groupoid r) 
-      = point U_groupoid (Tensor' q r).
+        Tensor (point Q_groupoid q) (point Q_groupoid r) 
+      = point Q_groupoid (Tensor' q r).
   Proof.
     intros q r.
     reflexivity.
   Qed. 
   Lemma OPlus : QType -> QType -> QType.
   Proof.
-    apply quotient1_map2 with (f := OPlus') (map_cell := @U_oplus).
-    apply @U_oplus_compose.
+    apply quotient1_map2 with (f := OPlus') (map_cell := @U_plus).
+    apply @U_plus_compose.
   Defined.
 
-  Definition One : QType := point U_groupoid One'.
-  Definition Lower τ `{IsHSet τ} : QType := point U_groupoid (Lower' τ).
+  Definition One : QType := point Q_groupoid One'.
+  Definition Lower τ `{IsHSet τ} : QType := point Q_groupoid (Lower' τ).
   
   Definition Qubit : QType := OPlus One One.
 End QType.
@@ -249,107 +138,41 @@ Infix "⊗" := Tensor (at level 40).
 Infix "⊕" := OPlus (at level 40).
 
 
-
-
 Section Basis.
-(*
+  Existing Instance Unitary'_trans. 
+  Existing Instance Unitary'_refl.
+  Existing Instance Unitary'_sym.
+  Existing Instance Unitary'_HSet.
+  Existing Instance Basis'_HSet.
 
-  Context `{Univalence}.
 
-  Fixpoint Lowered' (P : Type -> Type) (q : QType') : Type :=
-    match q with
-    | One' => Unit
-    | Tensor' q1 q2 => Lowered' P q1 * Lowered' P q2
-    | OPlus' q1 q2 =>  Lowered' P q1 * Lowered' P q2
-    | Lower' τ _ => P τ
-    end.
-  Instance Lowered'_ishprop : forall q, IsHProp (Lowered' IsHSet q).
-  Proof.
-    induction q; simpl.
-    * exact _.
-    * exact _.
-    * exact _.
-    * exact _.
-  Qed.
-  Definition Lowered'_hprop (q : QType') : hProp.
-    exists (Lowered' IsHSet q).
-    apply Lowered'_ishprop.
-  Defined.
-
-  Lemma finite_lowered : forall q, Finite (Basis' q) -> Lowered' IsHSet q.
-  Proof.
-    induction q; intros; simpl.
-    * exact tt.
-    * refine (IHq1 _, IHq2 _).
-      admit. admit. (* reasonable *)
-    * simpl in X.
-      refine (IHq1 _, IHq2 _).
-      admit. admit. (* reasonable *)
-    * simpl in X.
-      exact _.
-  Admitted.    
-
-  (* depends on univalence *)
-  Lemma finite_lowered_equiv : forall q, Finite (Basis' q) -> 
-                                         Lowered' IsHSet q <~> Unit.
-  Proof.
-    intros.
-    apply if_hprop_then_equiv_Unit.
-    * apply Lowered'_ishprop.
-    * apply finite_lowered; auto.
-  Qed.
-
-  (* true since UMatrix q r implies q is finite *)
-  Lemma UMatrix_Lowered_eq : forall q r,
-    UMatrix q r ->
-    Lowered' IsHSet q = Unit.
-  Proof.
-    intros q r [[pf_q pf_r U] pf_U].
-    apply path_universe_uncurried.
-    apply finite_lowered_equiv.
-    auto.
-  Qed.
-  Lemma UMatrix_Lowered_eq' : forall q r ,
-    UMatrix q r ->
-    BuildhProp (Lowered' IsHSet q) = BuildhProp Unit.
-  Proof.
-  Admitted.
-
-  Definition Lowered : QType -> hProp.
-  Proof.    
-    apply quotient1_rec_set with (C_point := Lowered'_hprop).
-    * intros q r U.
-      unfold Lowered'_hprop.
-      transitivity (BuildhProp Unit).
-      + apply (UMatrix_Lowered_eq' q r U).
-      + refine (UMatrix_Lowered_eq' _ _ (U^)%groupoid)^. apply U_sym.
-    * exact _.
-  Defined.
-*)
-
-  Lemma Basis'_ishset : forall (q : QType'), IsHSet (Basis' q).
-  Proof.
-    induction q.
-    * exact _.
-    * exact _.
-    * exact _.
-    * exact _.
-  Qed.
 
   Definition Basis'_hset (q : QType') : hSet.
     exists (Basis' q).
-    apply Basis'_ishset.
+    apply Basis'_HSet.
   Defined.
   
-  Definition Basis'_cell : forall q r (U : UMatrix q r), 
+  Definition Basis'_cell' : forall q r (U : Unitary' q r), 
+             Basis' q = Basis' r.
+  Proof.
+    intros.
+    unfold Unitary' in U.
+    destruct U as [U pfU].
+    apply (square _ pfU).
+  Qed.
+  Definition Basis'_cell : forall q r (U : Unitary' q r), 
              Basis'_hset q = Basis'_hset r.
+  Proof.
+    intros.
+    unfold Basis'_hset.
   Admitted.
-  Lemma Basis'_compose : forall (x y z : QType') (f : UMatrix x y) (g : UMatrix y z),
+
+  Lemma Basis'_compose : forall (x y z : QType') (f : Unitary' x y) (g : Unitary' y z),
   Basis'_cell x z (g o f)%groupoid = Basis'_cell x y f @ Basis'_cell y z g.
   Admitted.
 
   Definition Basis_hset : QType -> hSet.
-  Proof.
+  Proof. 
     apply quotient1_rec with (C_point := Basis'_hset)
                              (C_cell := Basis'_cell).
     * apply Basis'_compose.
@@ -392,51 +215,6 @@ Section Basis.
 
 End Basis.
 
-Section ToMatrix.
-(*  Context `{Univalence}.*)
-
-  Class FinQType (q : QType) := { finBasis : Finite (Basis q) }.
-  Global Instance finOne : FinQType One.
-  Proof.
-    constructor.
-    rewrite Basis_Unit. 
-    apply finite_unit.
-  Defined.
-  Global Instance finTensor {q r} `{FinQType q} `{FinQType r} : FinQType (q ⊗ r).
-  Proof.
-    constructor.
-    rewrite Basis_Tensor.
-    destruct H0, H1.
-    apply finite_prod; auto.
-  Defined.
-  Global Instance finOPlus {q r} `{FinQType q} `{FinQType r} : FinQType (q ⊕ r).
-  Proof.
-    constructor.
-    rewrite Basis_OPlus.
-    destruct H0, H1.
-    apply finite_sum; auto.
-  Defined.
-  Global Instance finLower {τ} `{Finite τ} : FinQType (Lower τ).
-  Proof.
-    constructor.
-    auto.
-  Qed.
-  Global Instance FinQType_Finite q `{FinQType q} : Finite (Basis q).
-  Proof.
-    destruct H0.
-    auto.
-  Qed.
-
-  (* Defining unitary transformations on classical states *)
-  Definition to_matrix {I J} `{Finite I} `{Finite J} (f : I -> J) : Matrix I J :=
-    MkMatrix _ _ (fun i j => if dec_paths j (f i) then 1 else 0)%nat.
-  Definition toU {q r} `{FinQType q} `{FinQType r} (f : Basis q -> Basis r)
-             (pf : Unitary_Prop (to_matrix f)) : q = r.
-  Proof.
-    admit (* will we need to prove this by induction on q, r? *).
-  Admitted.
-
-End ToMatrix.
 
 
 Section QType_ind.
@@ -462,10 +240,10 @@ Section QType_ind.
   Defined.
 
 
-  Variable QType_cell : forall {q r} (U : UMatrix q r),
+  Variable QType_cell : forall {q r} (U : Unitary' q r),
            cell _ U # QType_point q = QType_point r.
 
-  Variable QType_compose : forall q r s (U : UMatrix q r) (V : UMatrix r s),
+  Variable QType_compose : forall q r s (U : Unitary' q r) (V : Unitary' r s),
     QType_cell _ _ (V o U)%groupoid 
       = transport2 P (cell_compose _ U V) (QType_point q)
       @ ((transport_pp P (cell _ U) (cell _ V) (QType_point q)
@@ -502,11 +280,12 @@ Section QType_rec.
     | Lower' τ _ => C_Lower τ _
     end.
 
-  Variable QType_cell : forall {q r} (U : UMatrix q r),
+  Variable QType_cell : forall {q r} (U : Unitary' q r),
     QType_point_rec q = QType_point_rec r.
   
+  Existing Instance Unitary'_trans.
   Variable QType_compose : forall (x y z : QType') 
-                                  (f : UMatrix x y) (g : UMatrix y z),
+                                  (f : Unitary' x y) (g : Unitary' y z),
   QType_cell x z (g o f)%groupoid = QType_cell x y f @ QType_cell y z g.
 
   Lemma QType_rec : QType -> C.
@@ -555,10 +334,10 @@ Section PQType.
     | OPlus' q1 q2 => POPlus (to_PQType' q1) (to_PQType' q2)
     | Lower' τ _ => PLower τ
     end.
-  Lemma to_PQType_cell : forall q r (U : UMatrix q r),
+  Lemma to_PQType_cell : forall q r (U : Unitary' q r),
     to_PQType' q = to_PQType' r.
   Abort. (* Not true because PQType do not have higher structure *)
-    
+  
   (*
   Definition to_PQType : QType -> PQType.
   Proof.
@@ -615,23 +394,26 @@ Section PQType.
   Defined.
 
   Definition pbasis_basis_fun {p q : PQType} 
-               `{FinQType (from_PQType p)} `{FinQType (from_PQType q)}
-               (f : forall Var, PBasis Var p -> PBasis Var q) 
-                  : Basis (from_PQType p) -> Basis (from_PQType q).
+                  (f : forall Var, PBasis Var p <~> PBasis Var q) 
+                  : Basis (from_PQType p) <~> Basis (from_PQType q).
   Proof.
-    intros x.
-    apply pbasis_basis.
-    apply f.
-    apply basis_pbasis.
-    exact x.
-  Defined.
+    set (g := fun x => pbasis_basis (f _ (basis_pbasis x))).
+    set (g' := fun x => pbasis_basis ((f _)^-1 (basis_pbasis x))).
+    Print IsEquiv.
+    assert (pf1 : Sect g' g).
+    { intros x. unfold g, g'. admit.
+    }
+    assert (pf2 : Sect g g') by admit.
+    exists g.
+    apply (BuildIsEquiv _ _ _ g' pf1 pf2).
+    intros x. admit.
+  Admitted.
 
   Definition PBasis_to_Matrix {p q : PQType} 
-               `{FinQType (from_PQType p)} `{FinQType (from_PQType q)}
-               (f : forall Var, PBasis Var p -> PBasis Var q) 
+               (f : forall Var, PBasis Var p <~> PBasis Var q) 
              : Matrix (Basis (from_PQType p)) (Basis (from_PQType q)).
   Proof.
-    apply to_matrix.
+    apply isoToMatrix.
     exact (pbasis_basis_fun f).
   Defined.
 

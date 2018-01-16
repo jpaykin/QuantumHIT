@@ -1,185 +1,233 @@
 Require Import HoTT.
 Require Import quotient1.
 Require Import Groupoid.
+Require Import Math.
+Require Import Monad.
+
+Section Vector.
+
+  Definition ℂ := nat. (* stand-in for complex numbers *)
+  Definition Vector I := list (I * ℂ).
+  
+  
+  Open Scope list_scope.
+  Notation "[]" := nil.
+  Notation "[ x ]" := (x :: []).
 
 
-Section DecidablePaths.
-  Notation "x =? y" := (dec_paths x y) (at level 25).
-  Context {I} `{DecidablePaths I}.
-  Definition del (i j : I) : nat := (if i =? j then 1 else 0)%nat.
+  Definition Vector_fmap {I J}  (f : I -> J) : Vector I -> Vector J := 
+    fmap (fun (x : I * ℂ) => let (i,c) := x in (f i,c)).
+  Definition Vector_pure {I} (i : I) : Vector I := return_ (i,1).
+  Definition Vector_liftA {I J} (f : list ((I -> J)*ℂ)) (v : list (I*ℂ)) 
+                                 : list (J*ℂ) :=
+    do x  ← v; let (i,c) := (x : I*ℂ) in
+    do z ← f; let (f',c') := (z : (I -> J)*ℂ)  in 
+    return_ (f' i, c*c')%nat.
+  Definition Vector_bind {I} (v : list (I*ℂ)) {J} (f : I -> list (J*ℂ)) 
+                         : Vector J :=
+    do x ← v;   let (i,c) := (x : I*ℂ) in 
+    do y ← f i; let (j,c') := (y : J*ℂ) in
+    return_ (j,c*c')%nat.
+  Instance VectorF : Functor Vector := {fmap := @Vector_fmap}.
+  Instance VectorA : Applicative Vector := { pure := @Vector_pure 
+                                           ; liftA := @Vector_liftA }.
+  Instance VectorM : Monad Vector := { bind := @Vector_bind }.
 
-  Lemma del_sym : forall i j, del i j = del j i.
+
+  Fixpoint lookup {I} `{DecidablePaths I} i (v : Vector I) :=
+    match v with
+    | nil => 0%nat
+    | (j,c)::v' => if i =? j then c else lookup i v'
+    end.
+  Fixpoint In {A} (a : A) (ls : list A) : Type :=   
+    match ls with
+    | nil => Empty
+    | b :: ls' => a = b \/ In a ls'
+    end.
+  Notation "i ↦ c ∈ v" := (In (i,c) v) (at level 37).
+  
+  Fixpoint dot `{Funext} {I} `{Finite I} (v v' : Vector I) : ℂ :=
+    finplus (fun i => lookup i v * lookup i v')%nat.
+
+  Definition del {I} i : Vector I := return_ i.
+  Notation "δ^{ i }" := (del i).
+
+(*  Definition support {I J} (f : I -> Vector J) (j : J) := 
+    { x : I*ℂ & j ↦ snd x ∈ f (fst x) }.*)
+  Definition equiv {I J} (rows : I -> Vector J) (cols : J -> Vector I) :=
+    forall i j c, j ↦ c ∈ rows i <-> i ↦ c ∈ cols j.
+  Global Instance equiv_HProp : forall I J 
+                                (rows : I -> Vector J) (cols : J -> Vector I), 
+        IsHProp (equiv rows cols).
   Proof.
-    intros i j. unfold del.
-    destruct (j =? i) as [b | b];
-    destruct (i =? j) as [b' | b']; auto.
-    * apply Empty_ind.
-      apply b'. 
-      apply b^.
-    * apply Empty_ind.
-      apply b.
-      apply b'^.
-  Qed.
+  Admitted (* should be true *).
+  
+  Record Matrix I J := { rows : I -> Vector J
+                       ; cols : J -> Vector I
+                       ; rows_cols_equiv : equiv rows cols }.
+  Arguments rows {I J}.
+  Arguments cols {I J}.
+  Arguments rows_cols_equiv {I J}.
 
-  Lemma del_distr : forall i j n, (del i j * n = if i =? j then n else 0)%nat.
+  (* need some tactics for proving lemmas of the form `equiv rows cols` *)
+
+  Definition Id I : Matrix I I.
   Proof.
-    intros.
-    unfold del.
-    destruct (i =? j); auto. simpl.
-    rewrite <- nat_plus_n_O.
-    reflexivity.
-  Qed.
-    
-
-End DecidablePaths.
-Notation "x =? y" := (dec_paths x y) (at level 25).
-Notation "δ_{ i }[ j ]" := (del i j) (at level 40).
-
-
-Section finplus.
-  Context `{funext : Funext}.
-
-(*
-  Lemma finplus_del : forall {I} `{Finite I} i,
-    finplus (fun x => δ_{x}[i]) = 1%nat.
-  Proof.
-    intros.
-    unfold del.
-    destruct H.
-    unfold finplus. 
-    simpl.
-    set (A := { x : I & Fin (if x =? i then 1 else 0)%nat}).
-    unfold merely in merely_equiv_fin.
-    simpl in *.
-    generalize dependent merely_equiv_fin.
-    apply Trunc_ind; [intros; exact _ | ].
-    intros equiv. destruct equiv. simpl. 
-    destruct equiv_isequiv. simpl.
-  Admitted.
-*)
-
-  Lemma finplus_del : forall {I} `{Finite I} i (f : I -> nat),
-    finplus (fun x => if i =? x then f x else 0%nat) = f i.
-  Admitted.
-
-  Lemma finplus_del' : forall {I J} `{Finite I} (f : I -> J -> nat) i j,
-        f i j = finplus (fun k => (δ_{i}[k] * f k j))%nat.
-  Proof.
-    intros I J finI f i j.
-    set (g := (fun x => f x j)).
-    transitivity (g i); auto.
-    rewrite <- finplus_del.
-    apply ap. 
-    apply path_arrow.
-    intros x.
-    rewrite del_distr.
-    reflexivity.
+    exists del del.
+    { intros i j c. simpl; split. 
+      * intros [eq | [ ] ]. 
+        left. 
+        destruct (pair_inv eq) as [eqj eqc].
+        rewrite eqj, eqc. reflexivity.
+      * intros [eq | [ ] ].
+        left.
+        destruct (pair_inv eq) as [eqj eqc].
+        rewrite eqj, eqc. reflexivity.
+    }
   Defined.
 
-    Lemma finplus_sym : forall I J `{Finite I} `{Finite J} (f : I -> J -> nat),
-      finplus (fun i : I => finplus (fun j : J => f i j))
-    = finplus (fun j : J => finplus (fun i : I => f i j)).
-    Admitted.
+  Instance Matrix_refl : Reflexive Matrix.
+  Proof.
+    intros I. exact (Id I).
+  Defined.
 
-  Lemma finplus_distr : forall I `{Finite I} f n,
-    ((finplus f) * n = finplus (fun i => f i * n))%nat.
+  Instance Matrix_sym : Symmetric Matrix.
+  Proof.
+    intros I J A.
+    exists (cols A) (rows A).
+    intros i j c.
+    set (pf := rows_cols_equiv A j i c).
+    destruct pf; split; auto.
+  Defined.
+
+  Section Transitive.  
+    Context {I J K} (A : Matrix I J) (B : Matrix J K).
+    Definition rows_trans : I -> Vector K :=
+      fun i => do j ← rows A i; rows B j.
+    Definition cols_trans : K -> Vector I :=
+      fun k => do j ← cols B k; cols A j.
+    Lemma rows_cols_trans_equiv : equiv (rows_trans) (cols_trans).
+    Admitted.
+  End Transitive.
+  Instance Matrix_trans : Transitive Matrix.
+  Proof.
+    intros I J K A B.
+    exists (rows_trans A B) (cols_trans A B).
+    apply rows_cols_trans_equiv.
+  Defined.
+
+  Section Kron.
+    Context {I I' J J'} (A : Matrix I J) (B : Matrix I' J').
+    Definition rows_kron := fun (x : I*I') => 
+                       let (i,i') := x in 
+                       do j  ← rows A i;
+                       do j' ← rows B i';
+                       return_ (j,j').
+    Definition cols_kron := fun (y : J*J') =>
+                       let (j,j') := y in
+                       do i  ← cols A j;
+                       do i' ← cols B j';
+                       return_ (i,i').
+    Lemma rows_cols_equiv_kron : equiv rows_kron cols_kron.
+    Admitted.
+  End Kron.
+  Definition kron {I J I' J'} (A : Matrix I J) (B : Matrix I' J') 
+                :  Matrix (I*I') (J*J').
+  Proof.
+    exists (rows_kron A B) (cols_kron A B).
+    apply rows_cols_equiv_kron.
+  Defined.
+
+  Section Plus.
+    Context {I I' J J'} (A : Matrix I J) (B : Matrix I' J').
+    Definition rows_plus := fun (x : I+I') => match x with
+                                    | inl i  => do j ← rows A i; return_ (inl j)
+                                    | inr i' => do j ← rows B i'; return_ (inr j)
+                                    end.
+    Definition cols_plus := fun (y : J+J') => match y with
+                                    | inl j  => do i ← cols A j; return_ (inl i)
+                                    | inr j' => do i ← cols B j'; return_ (inr i)
+                                    end.
+    Lemma rows_cols_equiv_plus : equiv rows_plus cols_plus.
+    Admitted.
+  End Plus.
+  Definition plus {I J I' J'} (A : Matrix I J) (B : Matrix I' J') 
+                : Matrix (I+I') (J+J').
+  Proof.
+    exists (rows_plus A B) (cols_plus A B).
+    apply rows_cols_equiv_plus.
+  Defined.
+
+  
+  Definition isoToMatrix {I J} (f : I <~> J) : Matrix I J.
+  Proof.
+    exists (fun i => δ^{f i}) (fun j => δ^{f^-1 j}).
+    { intros i j c.
+      split; simpl; intros [H | [ ] ]; destruct (pair_inv H) as [H1 H2]; 
+        rewrite H1, H2; left.
+      * admit (* true *).
+      * admit.
+    }
   Admitted.
 
-End finplus.
+End Vector.
+Existing Instance VectorF.
+Existing Instance VectorA.
+Existing Instance VectorM.
+Instance VectorM_correct : Monad_Correct Vector.
+Admitted.
 
+Existing Instance Matrix_refl.
+Existing Instance Matrix_sym.
+Existing Instance Matrix_trans.
 
-Section Matrix.
-  Context `{funext : Funext}.
-
-
-  Inductive Matrix (I J : Type) := 
-  | MkMatrix `{Finite I} `{Finite J} :
-              (I -> J -> nat) -> Matrix I J.
-  (* Here, nat is a stand-in for C *)
-  Arguments MkMatrix {I J} {FinI} {FinJ} f : rename.
-
-  Ltac collapse_finite :=
-    repeat match goal with
-    | [H : Finite ?I, H' : Finite ?I |- _ ] => assert (eq : H = H') by (apply ishprop_finite); 
-                                               try rewrite eq in *; clear eq H
-    end.
-
-  Ltac prep_matrix_equality := collapse_finite;
-                               apply ap; apply path_arrow; intro i; apply path_arrow; intros j. 
-
-
-  Definition lookupMatrix {I J} (A : Matrix I J) (i : I) (j : J) :=
-    match A with
-    | MkMatrix _ _ A' => A' i j
-    end.
-  Notation "A [ i , j ]" := (lookupMatrix A i j) (at level 10).
-
-  Definition Id {I} `{Finite I}: Matrix I I := MkMatrix del.
-(*
-  Instance M_refl : Reflexive Matrix := Id.
-*)
-
-  Definition Compose {I J K} (A : Matrix I J) (B : Matrix J K) : Matrix I K :=
-    match A, B with
-    | MkMatrix _ _ A', MkMatrix _ _ B' => 
-      MkMatrix (fun i k => finplus (fun (j : J) => (A' i j * B' j k)%nat))
-    end.
-  Instance M_trans : Transitive Matrix := @Compose.
-    
-
-  Definition Transpose {I J} (A : Matrix I J) : Matrix J I :=
-    match A with
-    | MkMatrix _ _ A' => MkMatrix (fun j i => A' i j) 
-    (* for Complex numbers, this should be (A' i j)^† *)
-    end.
-  Instance M_sym : Symmetric Matrix := @Transpose.
+Section MatrixProofs.
 
   Open Scope groupoid_scope.
-  Section groupoid_properties.
+  Context `{Funext}.
+
+  Lemma Matrix_eq : forall {I J} 
+        (f f' : I -> Vector J) (g g' : J -> Vector I) pf pf',
+        (forall i, f i = f' i) ->
+        (forall j, g j = g' j) ->
+        Build_Matrix _ _ f g pf = Build_Matrix _ _ f' g' pf'.
+  Admitted.
+
+  Ltac destruct_matrices :=
+    repeat match goal with
+    | [ H : Matrix _ _ |- _ ] => destruct H
+    end.
+
+  Ltac solve_matrix_eq := intros; try (destruct_matrices; simpl;
+    repeat unfold Matrix_refl, Id, Matrix_sym, 
+           Matrix_trans, cols_trans, rows_trans,
+           kron, cols_kron, rows_kron,
+           plus, cols_plus, rows_plus;
+   apply Matrix_eq; simpl; intros; try reflexivity).
+
 
     Lemma Matrix_v_v : forall {I J} (A : Matrix I J), A^^ = A.
-    Proof.
-      intros.
-      destruct A.
-      reflexivity.
-    Qed.
-
-    (* I CAN'T FIND THIS IN THE LIBRARY, GRR *)
-    Lemma mult_comm : forall (m n : nat), (m * n = n * m)%nat.
-    Proof.
-      induction m; intros; simpl.
-      * rewrite <- mult_n_O. reflexivity.
-      * rewrite <- mult_n_Sm. rewrite IHm.
-        apply nat_plus_comm.
+    Proof. 
+      solve_matrix_eq. 
     Qed.
 
     Lemma Matrix_inv_compose : forall {I J K} (A : Matrix I J) (B : Matrix J K),
         (B o A)^ = A^ o B^.
-    Proof.
-      intros.
-      destruct A, B.
-      simpl. 
-      prep_matrix_equality.
-      apply ap.
-      apply path_arrow; intro k. 
-      apply mult_comm.
+    Proof. 
+      solve_matrix_eq.
     Qed.
 
-    Lemma Matrix_Id_v : forall {I} `{Finite I}, Id^ = @Id I _.
-    Proof.
-      intros.
-      unfold Id.
-      simpl.
-      prep_matrix_equality.
-      apply del_sym.
+    Lemma Matrix_Id_v : forall {I}, (Id I)^ = Id I.
+    Proof. 
+      solve_matrix_eq.
     Qed.
 
-    Lemma Matrix_Id_r : forall {I J} `{Finite I} (A : Matrix I J), A o Id = A.
-    Proof.
-      destruct A. simpl. 
-      prep_matrix_equality.
-      rewrite (finplus_del' n).
-      reflexivity.
+    Opaque bind return_.
+    Lemma Matrix_Id_r : forall {I J} (A : Matrix I J), A o 1 = A.
+    Proof. 
+      solve_matrix_eq.
+      * rewrite <- bind_left_unit. reflexivity.
+      * rewrite <- bind_right_unit. reflexivity.
     Qed.
 
 
@@ -187,239 +235,239 @@ Section Matrix.
                          (A : Matrix I J) (B : Matrix J K) (C : Matrix K L),
           (C o (B o A)) = (C o B) o A.
     Proof.
-      destruct A, B, C. simpl.
-      prep_matrix_equality. rename j into l.
-      set (f := fun k j => (n i j * n0 j k)%nat).
-      transitivity (finplus (fun k => finplus (fun j =>
-                                       n i j * n0 j k * n1 k l)))%nat.
-      { apply ap. apply path_arrow. intros k.
-        apply finplus_distr. }
-    
-      transitivity (finplus (fun j => finplus (fun k => 
-                                      n i j * n0 j k * n1 k l)))%nat.
-      { apply finplus_sym. }
-      
-      apply ap. apply path_arrow. intros k.
-      rewrite mult_comm.
-      rewrite finplus_distr.
-      apply ap. apply path_arrow. intros k'.
-      Open Scope nat_scope.
-      admit (* this is true, just arithmetic *).
+      solve_matrix_eq.
+      * rewrite bind_associativity. reflexivity.
+      * rewrite bind_associativity. reflexivity.
+    Qed.
+
+
+    Lemma Kron_inv : forall {I J I' J'} (A : Matrix I J) (B : Matrix I' J'),
+        (kron A B)^ = kron A^ B^.
+    Proof.
+      solve_matrix_eq.
+    Qed.
+    Lemma Kron_bilinear : forall {I I' J J' K K'} 
+                                 (A : Matrix I J) (B : Matrix J K)
+                                 (A' : Matrix I' J') (B' : Matrix J' K'),
+        kron B B' o kron A A' = kron (B o A) (B' o A').
+    Proof.
+      solve_matrix_eq.
+      * destruct i as [i i'].
+        repeat rewrite <- bind_associativity.
+        apply ap. apply path_arrow; intro j.
+        repeat rewrite <- bind_associativity.
+        admit (* need a monad_solver here *).
+      * destruct j as [k k'].
+        repeat rewrite <- bind_associativity.
+        apply ap. apply path_arrow; intro j.
+        repeat rewrite <- bind_associativity.
+        admit.
     Admitted.
-  End groupoid_properties.
 
+    Lemma kron_Id : forall I J,
+          kron (Id I) (Id J) = Id (I*J).
+    Proof.
+      solve_matrix_eq.
+    Qed.
 
-  Record UnitaryProp {I J} `{Finite I} `{Finite J} (A : Matrix I J) :=
-    { A_A_dag : A^ o A = Id
-    ; A_dag_A : A o A^ = Id
-    ; U_size  : fcard I = fcard J
-    }.
+    Lemma plus_inv : forall {I J I' J'} (A : Matrix I J) (B : Matrix I' J'),
+        (plus A B)^ = plus A^ B^.
+    Proof.
+      solve_matrix_eq.
+    Qed.
 
-  Lemma UnitaryProp_Id : forall {I} `{Finite I}, UnitaryProp (@Id I _).
+    Lemma plus_bilinear : forall {I I' J J' K K'} 
+                                 (A : Matrix I J) (B : Matrix J K)
+                                 (A' : Matrix I' J') (B' : Matrix J' K'),
+        plus B B' o plus A A' = plus (B o A) (B' o A').
+    Proof.
+      solve_matrix_eq.
+      - destruct i as [i | i'].
+        * (* interaction between fmap and bind *) admit.
+        * admit.
+      - admit.
+    Admitted.
+
+    Lemma plus_Id : forall I J,
+          plus (Id I) (Id J) = Id (I+J).
+    Proof.
+      solve_matrix_eq.
+      - destruct i as [i | j]; rewrite <- bind_left_unit; reflexivity.
+      - destruct j as [i | j]; rewrite <- bind_left_unit; reflexivity.
+    Qed.
+
+    Transparent bind return_.
+
+End MatrixProofs.
+
+Section UnitaryProp.
+
+  Context `{Funext}.
+  Open Scope groupoid_scope.
+  Record UnitaryProp {I J} (A : Matrix I J) := { A_dag_A : A^ o A = 1
+                                               ; A_A_dag : A o A^ = 1 
+                                               ; square  : I = J }.
+                        
+  Lemma UnitaryProp_Id : forall {I}, UnitaryProp (Id I).
   Proof.
-    intros. 
+    intros I.
     split.
     * rewrite Matrix_Id_r. apply Matrix_Id_v.
-    * rewrite Matrix_Id_v. rewrite Matrix_Id_r. reflexivity.
-    * reflexivity.
+    * rewrite Matrix_Id_v. apply Matrix_Id_r.
+    * exact 1.
   Qed.
-  Lemma UnitaryProp_sym : forall {I J} `{Finite I} `{Finite J} (A : Matrix I J), 
+
+  Lemma UnitaryProp_sym : forall {I J} (A : Matrix I J), 
         UnitaryProp A -> UnitaryProp (A^).
   Proof.
-    intros I J FinI FinJ A pf.
-    destruct pf.
-    split.
-    + rewrite Matrix_v_v. auto.
-    + rewrite Matrix_v_v. auto.
-    + symmetry. auto.
+    intros I J A [A_dag_A A_A_dag square].
+    constructor.
+    + rewrite Matrix_v_v.
+      apply A_A_dag.
+    + rewrite Matrix_v_v.
+      apply A_dag_A.
+    + exact square^.
   Qed.
-  Lemma UnitaryProp_trans : forall {I J K} `{Finite I} `{Finite J} `{Finite K} 
+
+  Lemma UnitaryProp_trans : forall {I J K}
         (A : Matrix I J) (B : Matrix J K),
     UnitaryProp A -> UnitaryProp B -> UnitaryProp (B o A).
   Proof.
-    intros I J K FinI FinJ FinK A B pfA pfB.
-    destruct pfA, pfB.
-    split.
+    intros I J K A B pfA pfB.
+    destruct pfA as [A_dag_A A_A_dag squareA]
+           , pfB as [B_dag_B B_B_dag squareB].
+    constructor.
     + rewrite Matrix_inv_compose.
       transitivity (A^ o (B^ o B) o A).
       * repeat rewrite Matrix_assoc. reflexivity.
-      * rewrite A_A_dag1.
+      * rewrite B_dag_B.
         rewrite Matrix_Id_r.
-        apply A_A_dag0.
+        apply A_dag_A.
     + rewrite Matrix_inv_compose.
       transitivity (B o (A o A^) o B^).
       * repeat rewrite Matrix_assoc. reflexivity.
-      * rewrite A_dag_A0.
+      * rewrite A_A_dag.
         rewrite Matrix_Id_r.
-        apply A_dag_A1.
-    + refine (U_size0 @ U_size1).
+        apply B_B_dag.
+    + exact (squareA @ squareB).
   Qed.
 
-  Inductive UnitaryMatrix' : Type -> Type -> Type :=
-  | UMatrix' {I} `{Finite I} (U : Matrix I I) : UnitaryProp U -> UnitaryMatrix' I I
-  | UIso' {I J} : I <~> J -> UnitaryMatrix' I J.
 
-  Definition toMatrix {I} `{Finite I} (f : I <~> I) : Matrix I I :=
-    MkMatrix (fun i j => if j =? f i then 1 else 0)%nat.
-  Lemma toMatrix_v : forall {I} `{Finite I} (f : I <~> I),
-    (toMatrix f)^ = toMatrix f^.
+  Lemma UnitaryProp_kron : forall {I J I' J'} (A : Matrix I J) (B : Matrix I' J'),
+        UnitaryProp A -> UnitaryProp B -> UnitaryProp (kron A B).
   Proof.
-    intros. simpl.
-    unfold toMatrix.
-    simpl.
-    prep_matrix_equality. Search (equiv_inverse (equiv_inverse _)).
-    specialize (einv_V f); intros eq.
-    destruct (i =? f j) as [b | b], (j =? f^-1 i) as [b' | b']; auto.
-    * apply Empty_ind. apply b'.
-      apply moveL_equiv_V.
-      rewrite b. reflexivity.
-    * apply Empty_ind. apply b.
-      apply moveL_equiv_M.
-      rewrite b'. reflexivity.
+    intros I J I' J' A B [A_dag_A A_A_dag squareA]
+                         [B_dag_B B_B_dag squareB].
+    constructor.
+    + rewrite Kron_inv.
+      rewrite Kron_bilinear.
+      rewrite A_dag_A, B_dag_B.
+      apply kron_Id.
+
+    + rewrite Kron_inv.
+      rewrite Kron_bilinear.
+      rewrite A_A_dag, B_B_dag.
+      apply kron_Id.
+    + rewrite squareA, squareB. reflexivity.
+  Qed.    
+
+  Lemma UnitaryProp_plus : forall {I J I' J'} (A : Matrix I J) (B : Matrix I' J'),
+        UnitaryProp A -> UnitaryProp B -> UnitaryProp (plus A B).
+  Proof.
+    intros I J I' J' A B [A_dag_A A_A_dag squareA]
+                         [B_dag_B B_B_dag squareB].
+    constructor.
+    + rewrite plus_inv. 
+      rewrite plus_bilinear.
+      rewrite A_dag_A, B_dag_B.
+      apply plus_Id.
+    + rewrite plus_inv. 
+      rewrite plus_bilinear.
+      rewrite A_A_dag, B_B_dag.
+      apply plus_Id.
+    + rewrite squareA, squareB. reflexivity.
   Qed.
 
+  Section UMatrix.
+    Definition UMatrix I J := { A : Matrix I J & UnitaryProp A }.
 
-
-  Inductive UnitaryMatrixEq' : forall I J, UnitaryMatrix' I J -> UnitaryMatrix' I J -> Type :=
-  | UIsoMatrix {I} `{Finite I} (f : I <~> I) (U : Matrix I I) (pf : UnitaryProp U) :
-    U = toMatrix f ->
-    UnitaryMatrixEq' I I (UMatrix' U pf) (UIso' f).
-  Definition UnitaryMatrixEq I J (U1 U2 : UnitaryMatrix' I J) : Type := 
-    Trunc -1 (UnitaryMatrixEq' I J U1 U2).
-
-  Definition UnitaryMatrix I J := @quotient (UnitaryMatrix' I J) (UnitaryMatrixEq I J) _.
-
-  Definition UMatrix {I} `{Finite I} (U : Matrix I I) (pf : UnitaryProp U) : UnitaryMatrix I I :=
-    class_of _ (UMatrix' U pf).
-  Definition UIso {I J} (f : I <~> J) : UnitaryMatrix I J :=
-    class_of _ (UIso' f).
-  
-  Section UnitaryMatrix_ind.
-
-    Variable P : forall I J, UnitaryMatrix I J -> Type.
-    Variable P_HSet : forall I J (U : UnitaryMatrix I J), IsHSet (P _ _ U).
-
-    Variable P_UMatrix : forall {I} `{Finite I} (U : Matrix I I) (pf : UnitaryProp U),
-        P _ _ (UMatrix U pf).
-    Variable P_UIso : forall {I J} (f : I <~> J), P _ _ (UIso f).
-
-    Variable P_Eq : forall {I} `{Finite I} (f : I <~> I) (U : Matrix I I) 
-                                           (pf : UnitaryProp U) (eq : U = toMatrix f),
-                           
-      transport (P I I) (related_classes_eq _ (tr (UIsoMatrix f _ pf eq))) (P_UMatrix _ _ _ pf)
-    = P_UIso _ _ f.
-
-    Let P_class : forall {I J} (U : UnitaryMatrix' I J), P _ _ (class_of _ U).
-    Proof.
-      destruct U; [ apply P_UMatrix | apply P_UIso ].
-    Defined.
+    Definition UId I : UMatrix I I := exist _ 1 (UnitaryProp_Id).
+    Instance UMatrix_refl : Reflexive UMatrix := UId.
     
-    Lemma UnitaryMatrix_ind : forall I J (U : UnitaryMatrix I J), P _ _ U.
+    Instance UMatrix_sym : Symmetric UMatrix.
     Proof.
-      intros I J.
-      apply quotient_ind with (dclass := P_class).
-      + exact _.
-      + intros x y. apply Trunc_ind; [exact _ | ].
-        intros eq.
-        destruct eq.
-        apply P_Eq.
+      intros I J [A pfA].
+      exists A^.
+      apply UnitaryProp_sym; auto.
     Defined.
 
-    (* TODO: add computation rule? *)
-
-  End UnitaryMatrix_ind.
-  About quotient_rec.
-
-  Section UnitaryMatrix_rec.
-    Variable C : Type -> Type -> Type.
-    Variable C_HSet : forall I J, IsHSet (C I J).
-    Variable C_UMatrix : forall {I} `{Finite I} (U : Matrix I I), UnitaryProp U -> C I I.
-    Variable C_UIso : forall {I J}, I <~> J -> C I J.
-    Variable C_Eq : forall {I} `{Finite I} (f : I <~> I) (U : Matrix I I) 
-                                           (pf : UnitaryProp U), U = toMatrix f ->
-                                           C_UMatrix _ _ U pf = C_UIso _ _ f.
-
-    Definition UnitaryMatrix_rec : forall I J, UnitaryMatrix I J -> C I J.
+    Instance UMatrix_trans : Transitive UMatrix.
     Proof.
-      apply UnitaryMatrix_ind with (P_UMatrix := C_UMatrix) (P_UIso := C_UIso).
-      + exact _.
-      + intros. 
-        refine (transport_const _ _ @ C_Eq _ _ _ _ _ eq).
-    Defined.
-  End UnitaryMatrix_rec.
-
-  Section UGroupoid.
-
-    Definition UId I : UnitaryMatrix I I := UIso 1.
-    Instance UnitaryMatrix_refl : Reflexive UnitaryMatrix := UId.
-
-    Instance UnitaryMatrix_sym : Symmetric UnitaryMatrix.
-    Proof.
-      transparent assert (sym_UMatrix : (forall {I} `{Finite I} (U : Matrix I I), 
-                                         UnitaryProp U -> UnitaryMatrix I I)).
-      {
-        intros .
-        refine (UMatrix (U^)%groupoid _).
-        apply UnitaryProp_sym.
-        auto.
-      }
-      
-      transparent assert (sym_UIso : (forall {I J} (f : I <~> J), 
-                                      UnitaryMatrix J I)).
-      { intros.
-        refine (UIso (symmetry _ _ f)). 
-      }
- 
-      intros I J.
-      apply UnitaryMatrix_rec with (C := fun I J => UnitaryMatrix J I) 
-                                   (C_UMatrix := sym_UMatrix)
-                                   (C_UIso := sym_UIso).
-      * exact _.
-      * clear I J. intros.
-        unfold sym_UMatrix, sym_UIso.
-        apply related_classes_eq.
-        apply tr.
-        apply UIsoMatrix.
-        rewrite X.
-        apply toMatrix_v.
+      intros I J K [A pfA] [B pfB].
+      exists (B o A).
+      apply UnitaryProp_trans; auto.
     Qed.
 
-  Instance UnitaryMatrix_trans : Transitive UnitaryMatrix.
-  Proof.
+    Definition UMatrix_kron :  forall I J I' J',
+               UMatrix I J -> UMatrix I' J' -> 
+               UMatrix (I * I') (J * J').
+    Proof.
+      intros I J I' J' [A pfA] [B pfB].
+      exists (kron A B).
+      apply UnitaryProp_kron; auto.
+    Qed.
+    
+    
+    Definition UMatrix_plus :  forall I J I' J',
+               UMatrix I J -> UMatrix I' J' -> 
+               UMatrix (I + I') (J + J').
+    Proof.
+      intros I J I' J' [A pfA] [B pfB].
+      exists (plus A B).
+      apply UnitaryProp_plus; auto.
+    Qed.
+  
+  End UMatrix.
+End UnitaryProp.
 
+Section Ugroupoid.
+Context `{Funext}.
+Existing Instance UMatrix_refl.
+Existing Instance UMatrix_sym.
+Existing Instance UMatrix_trans.
+
+Open Scope groupoid_scope.
+
+
+  Lemma UMatrix_1_l : forall I J (U : UMatrix I J),
+        1 o U = U.
   Admitted.
 
-  Print groupoid.
-
-  Lemma UnitaryMatrix_1_l : forall I J (U : UnitaryMatrix I J),
-    1 o U = U.
-  Admitted.
-
-  Lemma UnitaryMatrix_1_r : forall I J (U : UnitaryMatrix I J),
+  Lemma UMatrix_1_r : forall I J (U : UMatrix I J),
     U o 1 = U.
   Admitted.
 
-  Lemma UnitaryMatrix_assoc : forall I J K L 
-        (U : UnitaryMatrix I J) (V : UnitaryMatrix J K) (W : UnitaryMatrix K L),
+  Lemma UMatrix_assoc : forall I J K L 
+        (U : UMatrix I J) (V : UMatrix J K) (W : UMatrix K L),
         W o (V o U) = W o V o U.
   Admitted.
 
-  Lemma UnitaryMatrix_V_r : forall I J (U : UnitaryMatrix I J),
+  Lemma UMatrix_V_r : forall I J (U : UMatrix I J),
         U o U^ = 1.
   Admitted.
 
-  Lemma UnitaryMatrix_V_l : forall I J (U : UnitaryMatrix I J),
+  Lemma UMatrix_V_l : forall I J (U : UMatrix I J),
         U^ o U = 1.
   Admitted.
 
-  Lemma U_groupoid : groupoid _ UnitaryMatrix.
+  Lemma U_groupoid : groupoid _ UMatrix.
     exact(
     Build_groupoid _ _ 
-                   UnitaryMatrix_1_l UnitaryMatrix_1_r
-                   UnitaryMatrix_assoc
-                   UnitaryMatrix_V_r UnitaryMatrix_V_l).
+                   UMatrix_1_l UMatrix_1_r
+                   UMatrix_assoc
+                   UMatrix_V_r UMatrix_V_l).
   Defined.
 
-  End UGroupoid.
 
-End Matrix.
+
+End Ugroupoid.
