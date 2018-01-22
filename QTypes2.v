@@ -25,7 +25,7 @@ Fixpoint Basis' (q : QType') : Type :=
 Instance Basis'_HSet q : IsHSet (Basis' q).
 Proof.
   induction q; try (exact _).
-Qed.
+Defined.
 
 
 
@@ -393,6 +393,9 @@ Section PQType.
       exact (fun x => x).
   Defined.
 
+  Definition pbasis_basis_equiv {q} : PBasis Basis q <~> Basis (from_PQType q).
+  Admitted.
+
   Definition pbasis_basis_fun {p q : PQType} 
                   (f : forall Var, PBasis Var p <~> PBasis Var q) 
                   : Basis (from_PQType p) <~> Basis (from_PQType q).
@@ -417,26 +420,42 @@ Section PQType.
     exact (pbasis_basis_fun f).
   Defined.
 
+(*
+  Section basis_inj.
+    Lemma Basis'_inj : forall q r, Basis' q = Basis' r -> q = r.
+    Admitted (* not sure how to prove effectively *).
+    Lemma Basis_inj : forall q r, Basis q = Basis r -> q = r.
+    Proof.
+      set (P := fun q r => Basis q = Basis r -> q = r).
+      change (forall q r, P q r).
+      apply quotient1_ind2 with (P_1Type := _).
+  End basis_inj.
+*)
 
   Definition PBasis_to_Unitary {p q : PQType}
-               `{FinQType (from_PQType p)} `{FinQType (from_PQType q)}
-               (f : forall Var, PBasis Var p -> PBasis Var q) 
-               (pf : Unitary_Prop (PBasis_to_Matrix f))
+               (f : forall Var, PBasis Var p <~> PBasis Var q) 
+               (pf : UnitaryProp (PBasis_to_Matrix f))
              : from_PQType p = from_PQType q.
   Proof.
-    apply (toU (pbasis_basis_fun f)).
+(*    destruct pf.
+
+    repeat rewrite <- (path_universe_uncurried pbasis_basis_equiv) in U.
+    Existing Instance UMatrix_HSet.
+    set (pf' := cell U_groupoid U).
     auto.
   Defined.
+*)
+  Admitted.
 
   Definition PQubit := POPlus POne POne.
-  Definition X_fun : forall Var, PBasis Var PQubit -> PBasis Var PQubit.
+  Definition X_fun : forall Var, PBasis Var PQubit <~> PBasis Var PQubit.
   Proof.
-    simpl.
-    refine (fun _ z => match z with
+    intros Var. Locate "_ <~> _". Print Equiv.
+    exists (fun z => match z with
                        | inl tt => inr tt
                        | inr tt => inl tt
                        end).
-  Defined.
+  Admitted.
   (*
   Lemma Fin_PQubit : FinQType (from_PQType PQubit).
   Proof.
@@ -447,33 +466,26 @@ Section PQType.
   (* This is slow because it is checking the above theorem *)
   Definition X_mat : Matrix (Unit + Unit) (Unit + Unit) := PBasis_to_Matrix X_fun.
 
-  Lemma X_mat_Unitary : Unitary_Prop X_mat.
+  Lemma X_mat_Unitary : UnitaryProp X_mat.
   Proof.
-    unfold Unitary_Prop.
-    unfold X_mat.
-    unfold PBasis_to_Matrix. simpl.
-    unfold to_matrix. 
-    unfold Unitary_Prop. simpl.
-    constructor.
-    * admit.
-    * admit.
-    * reflexivity.
   Admitted.
   
   Definition X : Qubit = Qubit :=  PBasis_to_Unitary X_fun X_mat_Unitary.
 
 
   Definition distr_fun : forall q Var, 
-             PBasis Var (PTensor PQubit (Hole q)) -> PBasis Var (POPlus (Hole q) (Hole q)).
+             PBasis Var (PTensor PQubit (Hole q)) <~> PBasis Var (POPlus (Hole q) (Hole q)).
   Proof.
     intros q Var. simpl.
-    refine (fun z => match z with
+    exists (fun z => match z with
                      | (inl tt, v) => inl v
                      | (inr tt, v) => inr v
                      end).
-  Defined.
+    admit.
+  Admitted.
 
-  Definition distr_mat (q : QType) `{FinQType q} 
+(*
+  Definition distr_mat (q : QType) 
              : Matrix ((Unit+Unit)*Basis q) (Basis q + Basis q).
   Proof.
     set (p1 := PTensor PQubit (Hole q)).
@@ -494,6 +506,7 @@ Section PQType.
     simpl in pf.
     exact pf.
   Defined.
+*)
   
 
 End PQType.

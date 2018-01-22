@@ -2,6 +2,18 @@ Require Import HoTT.
 Require Import quotient1.
 Require Import QTypes2.
 
+(* P x = P0 x -> P1 x *)
+Lemma transport_fun : forall A (P0 P1 : A -> Type) (x y : A) (p : x = y) (a : P0 x -> P1 x),
+      transport (fun z => P0 z -> P1 z) p a 
+    = fun z : P0 y => transport P1 p (a (transport P0 p^ z)).
+Proof.
+  destruct p.
+  intros.
+  simpl.
+  reflexivity.
+Qed.
+
+
 Section Syntax.
 Context `{uni : Univalence}.
 Section Exp.
@@ -25,6 +37,8 @@ Section Exp.
   | put {τ : hSet} : τ -> exp (Lower τ)
   | let_bang {τ : hSet} {q} : exp (Lower τ) -> (τ -> exp q) -> exp q
   .
+
+About transport.
 
 
 End Exp.
@@ -94,6 +108,9 @@ Section Exp_1Type.
     intros Var.
     apply exp_trunc.
     admit.
+  Admitted.
+
+  Instance exp1_trunc : forall q r, IsTrunc 1 (q --o r).
   Admitted.
 End Exp_1Type.
 
@@ -225,33 +242,74 @@ Section Init.
   Defined.
 
   Variable q_in q_out : PQType.
-  Context `{@FinQType uni (from_PQType q_in)} `{@FinQType uni (from_PQType q_out)}.
-  Variable f : forall Var, PBasis Var q_in -> PBasis Var q_out.
+  Variable f : forall Var, PBasis Var q_in <~> PBasis Var q_out.
+Require Import Matrix2.
   Let f' : Matrix (Basis (from_PQType q_in)) (Basis (from_PQType q_out)).
   Proof.
-    apply (@PBasis_to_Matrix _ _ _ H).
-    admit (*exact H0.*)(*????*).
+    apply (@PBasis_to_Matrix _ _ _).
     exact f.
-  Admitted.
+  Defined.
 
-  Variable f_UProp : Unitary_Prop f'.
+  Variable f_UProp : UnitaryProp f'.
   Let f_U : from_PQType q_in = from_PQType q_out.
   Proof.
-    specialize (@PBasis_to_Unitary _ q_in q_out H); intros H''.
-    assert (H' : forall (f : forall Var, PBasis Var q_in -> PBasis Var q_out),
-      Unitary_Prop f' -> from_PQType q_in = from_PQType q_out).
-    { admit (*???*).
-    }
-    apply (H' f f_UProp).
-  Admitted.
+    apply (@PBasis_to_Unitary _ q_in q_out f).
+    exact f_UProp.
+  Defined.
 
-
+(*
   Axiom pinit_U : forall (x : PBasis Exp q_in),
         unitary f_U (pinit x) = pinit (f _ x).
+*)
 
 End Init.
 
-Section Meas.
+
+Section meas_all.
+
+  Existing Instance Basis'_HSet.
+  Fixpoint meas_all' (q : QType') : point _ q --o Lower (Basis' q).
+  Proof.
+    destruct q.
+    - intros Var x. refine (let_unit (var x) (put tt)).
+    - intros Var x. 
+      set (y := (x : Var (OPlus (point _ q1) (point _ q2)))).
+      refine (case_of (var y) (fun x => _) (fun x => _)).
+      * refine (let_bang (meas_all' q1 _ x) (fun z => put (inl z))).
+      * refine (let_bang (meas_all' q2 _ x) (fun z => put (inr z))).
+    - intros Var x.
+      set (y := (x : Var (Tensor (point _ q1) (point _ q2)))).
+      refine (let_pair (var y) (fun z1 z2 => _)).
+      refine (let_bang (meas_all' q1 _ z1) (fun z1' => _)).
+      refine (let_bang (meas_all' q2 _ z2) (fun z2' => _)).
+      refine (put (z1', z2')).
+    - intros Var x. simpl.
+      set (y := (x : Var (Lower τ))). 
+      set (e' := let_bang (var y) (fun z => put z)).
+      simpl in *.
+      exact e'.
+  Defined.
+
+  Let P := fun q => q --o Lower (Basis q).
+
+  Lemma meas_all_cell : forall (q r : QType') (U : Unitary' q r),
+        transport P (cell Q_groupoid U) (meas_all' q) = meas_all' r.
+  Admitted.
+
+  Open Scope groupoid_scope.
+  Existing Instance exp1_trunc.
+  Definition meas_all : forall (q : QType), q --o Lower (Basis q).
+  Proof.
+    eapply quotient1_ind with (P_point := meas_all')
+                              (P_cell := meas_all_cell).
+    - exact _.
+    - intros. (* since (q --o Lower (Basis q)) isn't a set, still need to prove
+      this part *)
+  Admitted.
+
+End meas_all.
+
+Section PMeas.
   Variable HVar : QType -> Type.
   Variable Var : QType -> Type.
   Variable from_HVar : forall q, exp Var q -> HVar q.
@@ -276,7 +334,7 @@ Section Meas.
   Defined.
 
 
-End Meas.
+End PMeas.
 
 
   Fixpoint meas_all {Var} {q : QType} (e : exp Var q) : exp Var (Lower (Basis q)).
