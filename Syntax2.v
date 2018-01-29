@@ -38,8 +38,6 @@ Section Exp.
   | let_bang {τ : hSet} {q} : exp (Lower τ) -> (τ -> exp q) -> exp q
   .
 
-About transport.
-
 
 End Exp.
 
@@ -153,20 +151,14 @@ Definition Let_Bang {τ : hSet} {q}
            (e : Exp (Lower τ)) (f : τ -> Exp q) : Exp q := fun Var =>
     let_bang (e Var) (fun x => f x Var).
 
-Definition New (b : Bool) : Exp Qubit := if b then Inj1 Unit else Inj0 Unit.
+(*
+Definition New (b : Bool) : Exp Qubit := if b then Put true else Put false.
 
-Definition meas {Var} (e : exp Var Qubit) : exp Var (Lower Bool).
-  unfold Qubit in e.
-  refine (
-  case_of e (fun x => let_unit (var x) (put false))
-            (fun x => let_unit (var x) (put true)) ).
-Defined.
 Definition Meas (e : Exp Qubit) : Exp (Lower Bool).
-Proof.
   unfold Qubit in e.
-  refine (Case_Of e (fun _ x => let_unit (var x) (put false))
-                    (fun _ x => let_unit (var x) (put true))).
+  refine (Let_Bang e Put).
 Defined.
+*)
 
 
 (*************************)
@@ -210,11 +202,20 @@ Admitted.
 Ltac is_β_step := apply related_classes_eq; constructor.
 Ltac β_step := etransitivity; [is_β_step | ].
 Ltac solve_β := repeat (try reflexivity; β_step).
-  
+
+Lemma β_cong_Let_Bang : forall α `{IsHSet α} q
+    (e e' : Exp (Lower α)) (f f' : α -> Exp q) 
+    (pf1 : e ≡ e') (pf2 : forall a, f a ≡ f' a),
+    Let_Bang e f ≡ Let_Bang e' f'.
+Admitted.
+(* need to lift Let_Bang to βExp, I think *) 
+
+(*  
 Lemma β_qubit : forall b, Meas (New b) ≡ Put b.
 Proof.
   destruct b; solve_β.
 Qed.
+*)
 
 (*************)
 (* unitaries *)
@@ -223,7 +224,445 @@ Qed.
 Definition unitary {q r : QType} (U : q = r) (e : Exp q) : Exp r := transport _ U e.
 Definition Unitary (q : QType) := q = q.
 
+(******************)
+(* Groupoid rules *)
+(******************)
 
+Lemma U_Eq : forall q r (U V : q = r) (pf : U = V) (e : Exp q),
+    U # e = V # e.
+Proof.
+  intros q r U V pf e. destruct pf; reflexivity.
+Qed.
+
+Lemma U_Compose : forall {q r s} (U : q = r) (V : r = s) (e : Exp q),
+    V # U # e = (U @ V) # e.
+Proof.
+  destruct U; intros. simpl.
+  rewrite concat_1p.
+  reflexivity.
+Qed.
+
+Lemma U_I : forall q (e : Exp q), 1 # e = e.
+Proof.
+  reflexivity.
+Qed.
+
+
+(********************)
+(* Structural rules *)
+(********************)
+
+Lemma U_Tensor_I : forall q1 q2 r1 r2 (U1 : q1 = r1) (U2 : q2 = r2)
+                   (e1 : Exp q1) (e2 : Exp q2),
+    ap2 Tensor U1 U2 # Pair e1 e2 = Pair (U1 # e1) (U2 # e2).
+Proof.
+  destruct U1, U2. intros.
+  reflexivity.
+Qed.
+
+Lemma U_Tensor_E : forall q1 q2 r1 r2 s (U1 : q1 = r1) (U2 : q2 = r2)
+                   (e : Exp (q1 ⊗ q2)) (f : Exp2 r1 r2 s),
+    Let_Pair (ap2 Tensor U1 U2 # e) f 
+  = Let_Pair e (fun _ x1 x2 => f _ (U1 # x1) (U2 # x2)).
+Proof.
+  destruct U1, U2; intros.
+  reflexivity.
+Qed.
+
+Lemma U_Tensor_comm : forall q1 q2 r s (U : r = s) 
+                      (e : Exp (q1 ⊗ q2)) (f : Exp2 q1 q2 r),
+    U # Let_Pair e f = Let_Pair e (fun _ x1 x2 => U # (f _ x1 x2)).
+Proof.
+  destruct U; intros.
+  reflexivity.
+Qed.
+
+Lemma U_OPlus_I0 : forall q0 q1 r0 r1 (U0 : q0 = r0) (U1 : q1 = r1)
+                          (e : Exp q0),
+    ap2 OPlus U0 U1 # Inj0 e = Inj0 (U0 # e).
+Proof.
+  destruct U0, U1; intros; reflexivity.
+Qed.
+Lemma U_OPlus_I1 : forall q0 q1 r0 r1 (U0 : q0 = r0) (U1 : q1 = r1)
+                          (e : Exp q1),
+    ap2 OPlus U0 U1 # Inj1 e = Inj1 (U1 # e).
+Proof.
+  destruct U0, U1; intros; reflexivity.
+Qed.
+About Case_Of.
+Lemma U_OPlus_E : forall q0 q1 r0 r1 s (U0 : q0 = r0) (U1 : q1 = r1)
+                  (e : Exp (q0 ⊕ q1)) (f0 : r0 --o s) (f1 : r1 --o s),
+    Case_Of (ap2 OPlus U0 U1 # e) f0 f1
+  = Case_Of e (fun _ x0 => f0 _ (U0 # x0)) (fun _ x1 => f1 _ (U1 # x1)).
+Proof.
+  destruct U0, U1; intros; reflexivity.
+Qed.
+Lemma U_OPlus_comm : forall q0 q1 r s (U : r = s)
+                     (e : Exp (q0 ⊕ q1)) (f0 : q0 --o r) (f1 : q1 --o r),
+    U # Case_Of e f0 f1 
+  = Case_Of e (fun _ x0 => U # f0 _ x0) (fun _ x1 => U # f1 _ x1).
+Proof.
+  destruct U; intros; reflexivity.
+Qed.
+
+Definition Lower0 (α : 0-Type) := Lower α.
+
+Lemma U_Lower_E : forall (α β : 0-Type) (pf : α = β) q
+                         (e : Exp (Lower α)) (f : β -> Exp q),
+    Let_Bang (transport (fun X => Exp (Lower0 X)) pf e) f 
+  = Let_Bang e (fun a => f (transport _ pf a)).
+Proof.
+    destruct pf. intros. reflexivity.
+Qed.
+
+
+Lemma U_Lower_comm : forall α `{IsHSet α} q r (U : q = r)
+                            (e : Exp (Lower α)) (f : α -> Exp q),
+    U # (Let_Bang e f) = Let_Bang e (fun a => U # (f a)).
+Proof.
+  destruct U; intros; reflexivity.
+Qed.
+
+Lemma U_Lower_distr : forall α β `{IsHSet α} `{IsHSet β} q (U : Lower α = Lower β)
+                         (e : Exp (Lower α)) (e' : Exp q),
+    Let_Bang (U # e) (fun _ => e') = Let_Bang e (fun _ => e').
+Abort.
+
+
+
+(* Initialization and measurement *)    
+
+Section Init.
+
+
+  Definition Init (q : QType) (e : Exp (QBasis q)) : Exp q := (QINIT q # e).
+
+  Require Import Groupoid.  
+  Open Scope groupoid_scope.
+
+  Lemma QINIT_Lower : forall α `{IsHSet α},
+    QINIT (Lower α) = 1.
+  Proof.
+    intros.
+    apply quotient1_1.
+  Defined.
+
+  Lemma Init_Lower α `{IsHSet α} (e : Exp (QBasis (Lower α))) : 
+    Init (Lower α) e = e.
+  Proof.
+    unfold Init.
+    rewrite QINIT_Lower.
+    reflexivity.
+  Qed.
+
+  Lemma U_Init : forall q r (U : q = r) (e : Exp (QBasis q)),
+    U # Init q e = Init r (transport (fun s => Exp (QBasis s)) U e).
+  Proof.
+    intros.
+    unfold Init.
+    refine ((transport_pp _ _ _ _)^ @ _).
+    rewrite QINIT_compose. (* MAIN LEMMA *)
+    refine (transport_pp _ _ _ _ @ _).
+    apply ap.
+    apply (transport_compose _ _ _ _)^.
+  Defined.
+  
+
+End Init.
+
+Section Meas.
+
+  Inductive Basis : QType -> Type :=
+  | basis {q'} : Basis' q' -> Basis (point _ q').
+(*  | bPair {q1 q2} : Basis q1 -> Basis q2 -> Basis (q1 ⊗ q2)
+  | bPut {α} `{IsHSet α} : α -> Basis (Lower α).
+*)
+  Inductive IsPoint : QType -> Type :=
+  | isPoint' q' : IsPoint (point _ q').
+
+  Existing Instance Basis'_HSet.
+
+  (* Can't even express Lower (Basis q) because Basis q is not an HSet *)
+  Definition Init_Basis {q} (b : Basis q) : Exp q.
+    destruct b as [q' b].
+    refine ((QINIT (point _ q')) # Put b).
+  Defined.
+
+  Definition Init_Basis_Lower {q'} (b : Basis (point _ q')) 
+             : Exp (Lower (Basis' q')).
+  Proof.
+    set (e := Init_Basis b).
+    refine ((QINIT (point _ q'))^ # e).
+  Defined.
+
+  Lemma Init_Basis_Put : forall {q'} (b : Basis' q'),
+    Init_Basis_Lower (basis b) = Put b.
+  Proof.
+    intros. 
+    unfold Init_Basis_Lower.
+    unfold Init_Basis. 
+    rewrite <- transport_pp.
+    rewrite concat_pV.
+    reflexivity.
+  Qed.
+(*
+  Lemma Init' q r' : Basis q -> q = point _ r' -> Exp (Lower (Basis' r')).
+  Proof.
+    intros [q' b] U.
+    set (e := Init (Lower (Basis' q')) (Put b) : Exp (QBasis (point _ q'))).
+    set (e' := transport (fun s => Exp (QBasis s)) U e).
+    exact e'.
+  Defined.
+  Definition Init'' {q'} (b : Basis (point _ q')) : Exp (Lower (Basis' q')) :=
+    Init' _ _ b 1.
+  Definition Init''' q (b : Basis q) : Exp (QBasis q).
+    destruct b as [q' b].
+    exact (Init' _ _ (basis _ b) 1).
+  Defined.
+  Definition Init'''' {q} (b : Basis q) : Exp q.
+  Proof.
+    destruct b as [q' b].
+*)
+    
+
+
+  (* I feel like IsPoint is wrong, but...??? *)
+  Definition Meas {q r} : IsPoint q -> Exp q -> (Basis q -> Exp r) -> Exp r.
+  Proof.
+    intros [q'] e f.
+    set (e' := (((QINIT (point _ q'))^ # e) : Exp (Lower (Basis' q')))).
+    refine (Let_Bang e' (fun b => f (basis b))). 
+  Defined.
+
+
+  Lemma Meas_Lower {α} `{IsHSet α} {r} : forall (e : Exp (Lower α)) (f : α -> Exp r),
+      Meas (isPoint' _) e (fun (x : Basis (Lower α)) =>
+      Let_Bang (Init_Basis_Lower x) (fun (y : α) => f y))
+    ≡ Let_Bang e f.
+  Proof.
+    intros e f.
+    unfold Meas.
+    simpl. 
+    
+    Open Scope groupoid_scope.
+    Require Import Matrix2.
+    simpl. Existing Instance UMatrix_refl. 
+    assert (eq : Matrix2.UMatrix_refl α = 1) by reflexivity.
+    rewrite eq; clear eq.
+    rewrite (quotient1_1 _ _ Q_groupoid (Lower' α)).
+    simpl.
+
+
+    transitivity (Let_Bang e (fun a => Let_Bang (Put a) f)).
+    * apply ap. apply ap.
+      apply path_arrow; intros a; simpl in a. 
+      rewrite Init_Basis_Put.
+      reflexivity.
+    * apply β_cong_Let_Bang; [reflexivity | ].
+      intros a.
+      apply related_classes_eq.
+      constructor.
+  Defined.
+    
+
+
+  Lemma Meas_commute : forall q r s (U : q = r) (pf_q : IsPoint q)
+                                    (e : Exp q) (f : Basis r -> Exp s),
+      Meas (U # pf_q) (U # e) f
+    = Meas pf_q e (fun x : Basis q => f (U # x)).
+  Proof.
+    destruct U; intros.
+    simpl.
+    reflexivity.
+  Qed.
+
+
+  Definition η {q} (pf : IsPoint q) (e : Exp q) : Exp q :=
+    Meas pf e (fun b => Init_Basis b).
+  
+
+  Lemma Let_Bang_η : forall α `{IsHSet α} q (U : Lower α = q) (e : Exp q),
+      Let_Bang (U^ # e) (fun a => U # Put a) 
+    = η (transport _ U (isPoint' _)) e.
+  Proof.
+    destruct U. intros e. simpl.
+
+    simpl. Existing Instance UMatrix_refl. 
+    assert (eq : Matrix2.UMatrix_refl α = 1) by reflexivity.
+    rewrite eq; clear eq.
+    rewrite (quotient1_1 _ _ Q_groupoid (Lower' α)).
+    simpl.
+    
+    reflexivity.
+  Qed.
+
+  
+
+  Lemma Meas_discard : forall q r s (U : q = r) (pf : IsPoint q) 
+                              (e : Exp q) (e' : Exp s),
+      Meas (U # pf) (U # e) (fun _ => e')
+    = Meas pf e (fun _ => e').
+  Proof.
+    intros.
+    rewrite Meas_commute.
+    reflexivity.
+  Qed.
+
+  Lemma LetBang_discard : forall α β `{IsHSet α} `{IsHSet β} q 
+                          (U : Lower α = Lower β)
+                          (e : Exp (Lower α)) (e' : Exp q),
+      Let_Bang (U # e) (fun _ => e') ≡ Let_Bang e (fun _ => e').
+  Proof.
+    intros α β IsHSetα IsHSetβ q U e e'.
+    simpl.
+
+    set (H := Meas_discard (Lower α) (Lower β) q U (isPoint' _) e e').
+    simpl in H.
+
+
+    assert (eq : Matrix2.UMatrix_refl α = 1) by reflexivity.
+    rewrite eq in H; clear eq.
+    rewrite (quotient1_1 _ _ Q_groupoid (Lower' α)) in H.
+    simpl in H.
+    rewrite <- H.
+
+    
+
+    
+
+
+    set (H' := @Meas_Lower _ _ _ ().
+    
+
+    transitivity (Meas (isPoint' _) e (fun (x : Basis (Lower α)) =>
+                  Let_Bang (Init_Basis_Lower x) (fun _ => e')));
+      [ | apply Meas_Lower].
+    simpl.
+
+    transitivity (Meas (transport IsPoint U (isPoint' (Lower' α)))
+                       (U # e) (fun _ => e') ).
+    * admit.
+    * apply Meas_Lower.
+
+    assert (Meas (transport IsPoint U (isPoint' (Lower' α))) (U # e) (fun _ => e')
+          ≡ Let_Bang e (fun _ => e')).
+    simpl in H.
+    
+
+
+    refine (ap _ (Meas_Lower _ _) @ _).
+    rewrite <- Meas_Lower.
+
+    simpl in H.
+    
+
+
+  Let Meas_Type q := forall r (U : q = r), Exp q -> Exp (QBasis r).
+  Definition Meas_point : forall q', Meas_Type (point Q_groupoid q').
+  Proof.
+    intros q' r V e.
+    refine (Let_Bang ((QINIT (point _ q'))^ # e) (fun a => 
+            ap QBasis V # Put a)).
+  Defined.
+
+  Lemma Meas_point_compose' : forall q' r' (U : Unitary' q' r') s 
+                                           (V : point _ q' = s) 
+                                           (e : Exp (point _ q')),
+      Meas_point q' s V e 
+    = Meas_point r' s ((cell Q_groupoid U)^ @ V) (cell Q_groupoid U # e).
+  Proof.
+    intros q' r' U s V e.
+    unfold Meas_point.
+
+
+
+  Let Meas_Type (q : QType) := Exp q -> Exp (QBasis q).
+  
+  Definition Meas_point : forall (q' : QType'), Meas_Type (point Q_groupoid q').
+  Proof.
+    intros q'.
+    intros e.
+    simpl.
+    unfold QBasis'.
+    exact (Let_Bang ((QINIT (point _ q'))^ # e) Put).
+  Defined.
+
+  Existing Instance Unitary'_HSet.
+  Existing Instance Unitary'_sym.
+
+  Lemma Meas_point_compose' : forall q' r' (U : Unitary' q' r') (e : Exp (point _ q')),
+      transport (fun s => Exp (QBasis s)) (cell Q_groupoid U) (Meas_point q' e)
+    = Meas_point r' (cell Q_groupoid U # e).
+  Proof.
+    intros.
+    rewrite transport_compose.
+    rewrite U_Lower_comm.
+
+    unfold Meas_point.
+
+    rewrite <- transport_pp.
+    rewrite <- inv_pV.
+    rewrite QINIT_compose.
+    rewrite inv_pp.
+    rewrite inverse_ap.
+    rewrite inv_V.
+    rewrite transport_pp.
+
+    set (H := U_Lower_E).
+    
+    rewrite quotient1_rec_cell; unfold QBasis_cell.
+
+
+    change ( Let_Bang ((QINIT (point _ q'))^ # e) (fun a => cell _ U # Put a)
+           = Let_Bang (cell _ U # (QINIT (point _ q'))^ # e) Put ).
+
+    rewrite inv_Vp.
+
+    assert (cell Q_groupoid U @ (QINIT (point Q_groupoid r'))^
+            = (QINIT (point Q_groupoid r') @ cell Q_groupoid (U^)%groupoid)^).
+    { Search (_ @ _)^.
+      rewrite inv_
+    }
+
+    Search (_ @ _^).
+    rewrite <- QINIT_compose.
+
+    
+
+    (* doesn't help... *)
+  Admitted.
+
+  Lemma Meas_point_compose : forall q' r' (U : Unitary' q' r'),
+    transport _ (cell Q_groupoid U) (Meas_point q') = Meas_point r'.
+  Proof.
+    intros q' r' U.
+    apply path_arrow. intros e.
+    rewrite transport_fun.
+    rewrite Meas_point_compose'. 
+    apply ap.
+    rewrite <- transport_pp.
+    rewrite concat_Vp.
+    reflexivity.
+
+    unfold Meas_point. 
+    rewrite <- transport_pp.
+    rewrite <- inv_pp.
+    rewrite QINIT_compose.
+    rewrite transport_compose.
+    rewrite U_Lower_comm.
+    repeat rewrite quotient1_rec_cell. unfold QBasis_cell.
+    
+
+
+
+
+
+  Definition Meas : forall q, Exp q -> Exp (QBasis q).
+  Proof.
+    apply quotient1_ind.
+End Meas.
+
+(*
 Section Init.
 
   Definition pinit {q : PQType} : PBasis Exp q -> Exp (from_PQType q).
@@ -310,6 +749,92 @@ Section meas_all.
 End meas_all.
 
 Section PMeas.
+
+  Definition PEquiv (p₁ p₂ : PQType) : Type :=
+     (forall Var, PBasis Var p₁ <~> PBasis Var p₂).
+
+  Instance PEquiv_refl : Reflexive PEquiv. 
+    intros p Var. apply reflexive_equiv.
+  Defined.
+  Instance PEquiv_sym : Symmetric PEquiv.
+    intros p₁ p₂ eq Var. apply symmetric_equiv.
+    apply eq.
+  Defined.
+  Instance PEquiv_trans : Transitive PEquiv.
+    intros p1 p2 p3 eq1 eq2 Var. eapply transitive_equiv.
+    + apply eq1.
+    + apply eq2.
+  Defined.
+  Instance PEquiv_HSet : forall p₁ p₂, IsHSet (PEquiv p₁ p₂).
+  Proof.
+    intros p1 p2. 
+    unfold PEquiv.
+    apply @trunc_forall; [exact _ | ].
+    intros Var.
+    apply @istrunc_equiv; [exact _ | ].
+    (* Is PBasis Var p2 an HSet? *)
+    (* might rely on the fact that Var is an HSet, which we don't currently have
+    but could add. *)
+  Admitted.
+
+  Require Import Groupoid.
+  Axiom G_PEquiv : groupoid PQType PEquiv.
+  
+  Definition Partial := quotient1 G_PEquiv.
+
+  Lemma fromPartial_cell : forall p1 p2, PEquiv p1 p2 ->
+    from_PQType p1 = from_PQType p2.
+  Admitted. (* true *)
+    
+  Lemma fromPartial_compose : forall (x y z : PQType) (f : PEquiv x y) (g : PEquiv y z),
+  fromPartial_cell x z (g o f)%groupoid =
+  fromPartial_cell x y f @ fromPartial_cell y z g.
+  Admitted.
+
+  Definition fromPartial : Partial -> QType.
+  Proof.
+    apply quotient1_rec with (C_point := from_PQType)
+                             (C_cell := fromPartial_cell).
+    * apply fromPartial_compose.
+    * exact _.
+  Defined.
+
+  Lemma PBasis_cell : forall Var (x y : PQType),
+      PEquiv x y -> PBasis Var x = PBasis Var y.
+  Admitted.
+
+  Definition PBasis' (Var : QType -> Type) : Partial -> Type.
+    apply quotient1_rec with (C_point := PBasis Var)
+                             (C_cell := PBasis_cell Var).
+  Admitted (* should be fine if we're careful about result types *).
+  Lemma PBasis'_point : forall Var (p : PQType),
+    PBasis' Var (point _ p) = PBasis Var p.
+  Admitted.
+  
+  Definition pinit' : forall (p : Partial), PBasis' Exp p -> Exp (fromPartial p).
+  Proof.
+    set (P := fun p => PBasis' Exp p -> Exp (fromPartial p)).
+    change (forall p, P p).
+
+    assert (pinit0 : forall (p : PQType), P (point _ p)).
+    { intros p0.
+      unfold P.
+      unfold fromPartial. simpl.
+      rewrite PBasis'_point.
+      apply pinit.
+    }
+
+    assert (pinit0_cell : forall (p1 p2 : PQType) (eq : PEquiv p1 p2),
+        transport P (cell _ eq) (pinit0 p1) = pinit0 p2).
+    { unfold PEquiv. intros p1 p2 eq. admit.
+      (* maybe by case analysis on p1 and p2?? *)
+    }
+
+    apply quotient1_ind with (P_point := pinit0)
+                             (P_cell := pinit0_cell).
+  Abort.
+
+
   Variable HVar : QType -> Type.
   Variable Var : QType -> Type.
   Variable from_HVar : forall q, exp Var q -> HVar q.
@@ -355,7 +880,6 @@ End PMeas.
 Section Meas_Ax.
 
   Variable q_in q_out : PQType.
-  Context `{@FinQType uni (from_PQType q_in)} `{@FinQType uni (from_PQType q_out)}.
   Variable f : forall Var, PBasis Var q_in -> PBasis Var q_out.
 
   Variable f_UProp : Unitary_Prop (f' _ _ f).
@@ -608,5 +1132,5 @@ Lemma Meas_Discard_Qubit : forall (e : Exp Qubit),
                                (fun _ z => let_unit (var z) (put tt)).
 *)
 
-
+*)
 End Syntax.

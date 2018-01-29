@@ -306,7 +306,8 @@ Section UnitaryProp.
   Open Scope groupoid_scope.
   Record UnitaryProp {I J} (A : Matrix I J) := { A_dag_A : A^ o A = 1
                                                ; A_A_dag : A o A^ = 1 
-                                               ; square  : I = J }.
+                                               ; square  : Trunc -1 (I = J) }.
+
                         
   Lemma UnitaryProp_Id : forall {I}, UnitaryProp (Id I).
   Proof.
@@ -314,7 +315,7 @@ Section UnitaryProp.
     split.
     * rewrite Matrix_Id_r. apply Matrix_Id_v.
     * rewrite Matrix_Id_v. apply Matrix_Id_r.
-    * exact 1.
+    * apply tr. exact 1.
   Qed.
 
   Lemma UnitaryProp_sym : forall {I J} (A : Matrix I J), 
@@ -326,7 +327,8 @@ Section UnitaryProp.
       apply A_A_dag.
     + rewrite Matrix_v_v.
       apply A_dag_A.
-    + exact square^.
+    + generalize dependent square. apply Trunc_rec. intros square.
+      exact (tr (square^)).
   Qed.
 
   Lemma UnitaryProp_trans : forall {I J K}
@@ -349,7 +351,9 @@ Section UnitaryProp.
       * rewrite A_A_dag.
         rewrite Matrix_Id_r.
         apply B_B_dag.
-    + exact (squareA @ squareB).
+    + generalize dependent squareA. apply Trunc_rec. intros squareA.
+      generalize dependent squareB. apply Trunc_rec. intros squareB.
+      exact (tr (squareA @ squareB)).
   Qed.
 
 
@@ -368,7 +372,9 @@ Section UnitaryProp.
       rewrite Kron_bilinear.
       rewrite A_A_dag, B_B_dag.
       apply kron_Id.
-    + rewrite squareA, squareB. reflexivity.
+    + generalize dependent squareA. apply Trunc_rec. intros squareA.
+      generalize dependent squareB. apply Trunc_rec. intros squareB.
+      apply tr. rewrite squareA, squareB. reflexivity.
   Qed.    
 
   Lemma UnitaryProp_plus : forall {I J I' J'} (A : Matrix I J) (B : Matrix I' J'),
@@ -385,7 +391,9 @@ Section UnitaryProp.
       rewrite plus_bilinear.
       rewrite A_A_dag, B_B_dag.
       apply plus_Id.
-    + rewrite squareA, squareB. reflexivity.
+    + generalize dependent squareA. apply Trunc_rec. intros squareA.
+      generalize dependent squareB. apply Trunc_rec. intros squareB.
+      apply tr. rewrite squareA, squareB. reflexivity.
   Qed.
 
   Section UMatrix.

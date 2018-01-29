@@ -31,6 +31,9 @@ Defined.
 
 Section Q_groupoid.
 
+  Inductive Unitary : QType' -> QType' -> Type :=
+  | MkU {q} (U : Matrix (Basis' q) (Basis' q)) : UnitaryProp U -> Unitary q q.
+
   Definition Unitary' (q r : QType') := UMatrix (Basis' q) (Basis' r).
   Instance Unitary'_refl : Reflexive Unitary'.
   Proof.
@@ -66,7 +69,7 @@ Section Q_groupoid.
   Instance Unitary'_HSet : forall q r, IsHSet (Unitary' q r).
   Proof.
     exact _.
-  Qed.
+  Defined.
 
   Definition Q_groupoid : groupoid _ Unitary'.
   Proof.
@@ -108,7 +111,6 @@ Section QType.
   
   Definition QType := quotient1 Q_groupoid.
 
-
   Definition Tensor : QType -> QType -> QType.
   Proof.
     apply quotient1_map2 with (f := Tensor') (map_cell := @U_tensor).
@@ -121,23 +123,156 @@ Section QType.
     intros q r.
     reflexivity.
   Qed. 
+
+  Definition Tensor_cell {q1 q2 r1 r2} 
+             (U1 : Unitary' q1 r1) (U2 : Unitary' q2 r2) :
+             ap2 Tensor (cell _ U1) (cell _ U2) = cell _ (U_tensor U1 U2).
+  Proof.
+    apply quotient1_map2_cell.
+  Qed.
+
+
   Lemma OPlus : QType -> QType -> QType.
   Proof.
     apply quotient1_map2 with (f := OPlus') (map_cell := @U_plus).
     apply @U_plus_compose.
   Defined.
 
+  Lemma OPlus_point : forall q r,
+      OPlus (point Q_groupoid q) (point Q_groupoid r)
+    = point Q_groupoid (OPlus' q r).
+  Proof. reflexivity.
+  Qed.
+  Lemma OPlus_cell : forall {q1 q2 r1 r2} 
+                    (U1 : Unitary' q1 r1) (U2 : Unitary' q2 r2),
+    ap2 OPlus (cell _ U1) (cell _ U2) = cell _ (U_plus U1 U2).
+  Proof.
+    intros.
+    apply quotient1_map2_cell.
+  Qed.
+
   Definition One : QType := point Q_groupoid One'.
   Definition Lower τ `{IsHSet τ} : QType := point Q_groupoid (Lower' τ).
   
-  Definition Qubit : QType := OPlus One One.
+  Definition Qubit : QType := Lower Bool.
 End QType.
 
 
 Infix "⊗" := Tensor (at level 40).
 Infix "⊕" := OPlus (at level 40).
 
+Section QBasis.
+  Existing Instance Unitary'_HSet.
 
+  Definition QBasis' (q' : QType') := Lower (Basis' q').
+  Definition QBasis_cell {q' r'} : Unitary' q' r' -> QBasis' q' = QBasis' r'. 
+  Proof.
+    intros U'.
+    unfold QBasis'.
+    apply cell.
+    unfold Unitary' in *.
+    simpl.
+    exact U'.
+  Defined.
+
+  Open Scope groupoid_scope.
+  Existing Instance Unitary'_trans.
+
+  Arguments cell {A R R_HSet reflR transR symmR} G x y.
+  Arguments cell_compose {A R R_HSet reflR transR symmR} G x y z.
+
+  Definition QBasis_compose : forall q r s (U : Unitary' q r) (V : Unitary' r s),
+    QBasis_cell (V o U) = QBasis_cell U @ QBasis_cell V.
+  Proof.
+    intros q r s U V.
+    unfold QBasis_cell.
+    apply (cell_compose Q_groupoid (Lower' (Basis' q)) 
+                                   (Lower' (Basis' r)) 
+                                   (Lower' (Basis' s))).
+  Defined.
+
+  Definition QBasis : QType -> QType.
+  Proof.
+    apply quotient1_rec with (C_point := QBasis')
+                             (C_cell := @QBasis_cell).
+    * apply QBasis_compose.
+    * exact _.
+  Defined.
+
+  Lemma transport_QBasis : forall {q r} (U : q = r) (V : QBasis q = q),
+    transport (fun s => QBasis s = s) U V = ap QBasis (U^) @ V @ U.
+  Proof.
+    destruct U; intros V.
+    simpl.
+    Search (1 @ _)%path.
+    refine ((concat_1p _)^ @ (concat_p1 _)^).
+  Defined.
+    
+
+  Section QINIT.
+    Existing Instance UMatrix_refl.
+    Existing Instance Unitary'_sym.
+    Existing Instance UMatrix_sym.
+
+    Let QINIT_type q := QBasis q = q.
+
+    Instance QINIT_type_1Type : forall q, IsTrunc 0 (QINIT_type q).
+    Proof.
+      intros.
+      unfold QINIT_type.
+      exact _.
+    Defined.
+
+    Let QINIT_point (q' : QType') : QINIT_type (point _ q').
+    Proof.
+      exact (cell Q_groupoid (Lower' (Basis' q')) q' 1).
+    Defined.
+    Let QINIT_cell q' r' (U : Unitary' q' r') :
+      transport _ (cell _ q' r' U) (QINIT_point q') = QINIT_point r'.
+    Proof.
+      unfold QINIT_type, QINIT_point.
+      rewrite transport_QBasis.
+      rewrite quotient1_inv.
+      rewrite quotient1_rec_cell.
+      unfold QBasis_cell.
+      repeat rewrite <- cell_compose.
+      apply ap.
+      unfold Unitary' in U.
+      refine (_ @ (UMatrix_V_r _ _ U)).
+      unfold Unitary'_trans, Unitary'_sym.
+      apply (ap (fun (V : UMatrix (Basis' r') (Basis' q')) => 
+                     UMatrix_trans _ _ _ V U)).
+      set (H' := g_1_l Q_groupoid U^).
+      simpl in *. unfold Unitary'_trans, Unitary'_refl in H'.
+      exact H'.
+    Defined. 
+
+
+    Definition QINIT : forall q, QBasis q = q.
+    Proof.
+      apply quotient1_ind_set with (P_point := QINIT_point).
+      * exact _.
+      * apply QINIT_cell.
+    Defined.
+
+    Lemma QINIT_compose : forall q r (U : q = r),
+        QINIT q @ U = ap QBasis U @ QINIT r.
+    Proof.
+      destruct U.
+      simpl. 
+      refine (concat_p1 _ @ (concat_1p _)^).
+    Qed.
+
+  End QINIT.
+
+
+  Arguments cell {A R R_HSet reflR transR symmR} G {x y}.
+  Arguments cell_compose {A R R_HSet reflR transR symmR} G {x y z}.
+
+
+End QBasis.
+
+(*
 Section Basis.
   Existing Instance Unitary'_trans. 
   Existing Instance Unitary'_refl.
@@ -146,11 +281,99 @@ Section Basis.
   Existing Instance Basis'_HSet.
 
 
-
   Definition Basis'_hset (q : QType') : hSet.
     exists (Basis' q).
     apply Basis'_HSet.
   Defined.
+
+
+  Existing Instance UMatrix_HSet.
+  Definition HMatrix : hSet -> hSet -> Type := UMatrix. 
+  Instance hmatrix_refl : Reflexive HMatrix.
+  Proof.
+    intros I.
+    apply UMatrix_refl.
+  Defined.
+  Instance hmatrix_sym : Symmetric HMatrix.
+  Proof.
+    intros I J U.
+    apply UMatrix_sym. exact U.
+  Defined.
+  Instance hmatrix_trans : Transitive HMatrix.
+  Proof.
+    intros I J K U V.
+    apply (UMatrix_trans _ _ _ U V).
+  Defined.
+  Lemma U_groupoid_hset : groupoid hSet HMatrix.
+  Admitted.
+
+  Lemma Basis_cell : forall q r, Unitary' q r  ->
+                                 HMatrix (Basis'_hset q) (Basis'_hset r).
+  Proof.
+    intros q r U.
+    exact U.
+  Defined.
+ About quotient1.
+
+    
+  Definition Basis'' (q : QType') := quotient1 (Basis' q) U_groupoid. ???
+
+
+
+
+  Inductive Basis (q : QType) : Type :=
+  | basis {q' : QType'} (U : q = point _ q') (b : Basis' q') : Basis q.
+
+  Definition Basis_Lower_fun {α} `{IsHSet α} : Basis (Lower α) -> α.
+  Proof.
+    destruct 1.  
+(*
+  Inductive Basis : QType -> Type :=
+  | basis {q : QType'} : Basis' q -> Basis (point _ q).
+*)
+(*  | Basis_Tensor {q r} : Basis q -> Basis r -> Basis (q ⊗ r)
+  | Basis_OPlus_l {q r} : Basis q -> Basis (q ⊕ r)
+  | Basis_OPlus_r {q r} : Basis r -> Basis (q ⊕ r)
+  | Basis_Lower α `{IsHSet α} : α -> Basis (Lower α).*)
+
+(*
+I want U # (b : Basis q) : Basis r
+So I don't want Basis q = Basis r.
+
+e.g. H # (put b) <> b
+     so I don't want (H # Basis Qubit) = Basis Qubit
+*)
+
+(* maybe not...
+  Lemma Basis_inv : forall q' q (b : Basis q) (U : point _ q' = q), 
+    {x : Basis' q' & b = U # basis x}.
+  Proof.
+    intros q' q b. destruct U. simpl.
+    destruct b. intros U. 
+   
+    assert (b' : Basis' q').
+    { 
+    }
+
+    set (P := fun q => forall (b : Basis q) (U : point _ q' = q), 
+              {x : Basis' q' & b = U # basis x}).
+    change (forall q, P q).
+    transparent assert (P_point' : (forall q0, P (point _ q0))).
+    { intros q0. unfold P. intros B U.
+    }
+    apply quotient1_ind with (P_point :=
+
+*)
+
+  Lemma Basis_Lower α `{IsHSet α} : Basis (Lower α) = α.
+  Proof.
+    apply path_universe_uncurried.
+    transparent assert (f : (Basis (Lower α) -> α)).
+    { unfold Lower.
+     }
+    exists f.
+
+(*
   
   Definition Basis'_cell' : forall q r (U : Unitary' q r), 
              Basis' q = Basis' r.
@@ -179,24 +402,69 @@ Section Basis.
     * exact _.
   Defined.
   Definition Basis (q : QType) : Type := Basis_hset q.
+*)
 
-  Lemma Basis_Unit : Basis One = Unit.
+  Notation "[[ A ]]" := (point U_groupoid_hset (BuildhSet A)).
+  Definition hset_prod (A B : hSet) : hSet := BuildhSet (A * B).
+
+  Existing Instance UMatrix_trans.
+  Lemma UMatrix_kron_bilinear : forall a1 a2 a3 b1 b2 b3 a23 b23 b12 a12,
+    UMatrix_kron a1 a3 b1 b3 (a23 o a12)%groupoid (b23 o b12)%groupoid =
+  (UMatrix_kron a2 a3 b2 b3 a23 b23 o UMatrix_kron a1 a2 b1 b2 a12 b12)%groupoid.
+  Admitted.
+
+  Definition qhset_prod (A B : quotient1 U_groupoid_hset)
+                     : quotient1 U_groupoid_hset.
+    transparent assert (map_cell0 : (forall a a' b b', 
+            HMatrix a a' -> 
+            HMatrix b b' ->
+            HMatrix (hset_prod a b) (hset_prod a' b'))).
+    {
+      intros a a' b b' U V.
+      apply (UMatrix_kron _ _ _ _ U V).
+    }
+    generalize dependent A. generalize dependent B.
+    apply quotient1_map2 with (f := hset_prod)
+                              (map_cell := map_cell0).
+    { intros. unfold map_cell0. apply UMatrix_kron_bilinear.
+    }
+  Defined.
+  Definition qset_sum (A B  : quotient1 U_groupoid_hset)
+                     : quotient1 U_groupoid_hset.
+  Admitted.
+
+  Notation "A × B" := (qhset_prod A B) (at level 30).
+  Notation "A ⧺ B" := (qset_sum A B) (at level 30).
+
+  Lemma Basis_Unit : Basis One = [[ Unit ]].
   Proof.
     reflexivity.
   Qed.
 
-  Lemma Basis_Tensor : forall q r, Basis (q ⊗ r) = Basis q * Basis r.
-  Proof.
-    apply quotient1_ind2_set with (P_point := fun _ _ => 1%path).
+  Lemma Basis_Tensor : forall q r, Basis (q ⊗ r) = Basis q × Basis r.
+  Proof. 
+    assert (b_point : forall (q' r' : QType'),
+        Basis (point _ (Tensor' q' r')) = Basis (point _ q') × Basis (point _ r')).
+    admit (*
+    { intros. unfold Basis. unfold quotient1_map. simpl.
+      unfold Basis'_hset. simpl.
+      unfold qhset_prod. unfold quotient1_map2. 
+      unfold quotient1_rec2. simpl.
+      apply ap.
+      unfold hset_prod. simpl.
+      admit (* huh, how did that happen? *).
+    }
+*).
+    apply quotient1_ind2_set with (P_point := b_point).
     * intros. exact _.
     * intros. admit.
     * admit.
   Admitted.
 
-  Lemma Basis_OPlus : forall q r, Basis (q ⊕ r) = Basis q + Basis r.
+  Lemma Basis_OPlus : forall q r, Basis (q ⊕ r) = Basis q ⧺ Basis r.
   Admitted.
 
-  Lemma Basis_Lower : forall τ `{IsHSet τ}, Basis (Lower τ) = τ.
+  Lemma Basis_Lower : forall τ `{IsHSet τ}, Basis (Lower τ) = [[τ]].
   Proof.
     intros.
     reflexivity.
@@ -205,16 +473,11 @@ Section Basis.
   Lemma Plus_Bool_equiv : Unit + Unit <~> Bool.
   Admitted.
 
-  Lemma Basis_Qubit : Basis Qubit <~> Bool.
-  Proof.
-    unfold Qubit. 
-    rewrite Basis_OPlus.
-    unfold Basis. simpl.
-    apply Plus_Bool_equiv.
-  Qed.
+  Lemma Basis_Qubit : Basis Qubit = [[Bool]].
+  Admitted.
 
 End Basis.
-
+*)
 
 
 Section QType_ind.
@@ -298,7 +561,7 @@ Section QType_rec.
 
 End QType_rec.
 
-
+(*
 Section PQType.
 
   (******************)
@@ -509,7 +772,7 @@ Section PQType.
 *)
   
 
-End PQType.
+End PQType.*)
 End QTypes.
 
 Infix "⊗" := Tensor (at level 40).
